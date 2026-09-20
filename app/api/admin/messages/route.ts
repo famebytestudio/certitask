@@ -8,7 +8,7 @@ export async function GET() {
 
   try {
     const messages = await prisma.contactMessage.findMany({
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
     });
 
     return NextResponse.json({ messages });

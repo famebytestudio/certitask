@@ -7,6 +7,7 @@ import { projectListInclude } from "@/lib/queries";
 import { audit } from "@/lib/audit";
 import { parseDeadline, parseSkills } from "@/lib/projects";
 import { notify } from "@/lib/notifications";
+import { BillingError, consumePost, getEntitlement } from "@/lib/billing";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -62,12 +63,6 @@ export async function PATCH(req: Request, { params }: Params) {
       if (typeof body.status !== "string" || !allowed.includes(body.status)) {
         return NextResponse.json({ error: `Cannot change a ${project.status.toLowerCase()} project to ${String(body.status).toLowerCase()}` }, { status: 400 });
       }
-      if (body.status === "ACTIVE" && project.status === "DRAFT") {
-        const me = await prisma.user.findUnique({ where: { id: auth.userId }, select: { verificationStatus: true } });
-        if (me?.verificationStatus !== "VERIFIED") {
-          return NextResponse.json({ error: "Complete verification before publishing a project" }, { status: 403 });
-        }
-      }
       data.status = body.status;
       if (body.status === "ACTIVE" && !project.publishedAt) data.publishedAt = new Date();
       if (body.status === "CLOSED") data.closedAt = new Date();
@@ -117,16 +112,32 @@ export async function PATCH(req: Request, { params }: Params) {
       data.teamCap = cap;
     }
 
+    if (body.featured !== undefined) {
+      const ent = await getEntitlement(auth.userId);
+      if (body.featured && !ent.features.featured) {
+        return NextResponse.json({ error: "Featured projects are a Pro plan perk", billing: "PLAN_REQUIRED" }, { status: 402 });
+      }
+      data.featured = !!body.featured;
+    }
+
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
     }
 
-    const updated = await prisma.project.update({ where: { id }, data, include: projectListInclude });
-    await audit(auth, data.status ? "project.status_changed" : "project.updated", "project", id, {
-      from: project.status,
-      to: updated.status,
-      fields: Object.keys(data),
-    });
+    const publishing = data.status === "ACTIVE" && project.status === "DRAFT";
+    let updated;
+    try {
+      updated = await prisma.$transaction(async (tx) => {
+        const u = await tx.project.update({ where: { id }, data, include: projectListInclude });
+        await audit(auth, data.status ? "project.status_changed" : "project.updated", "project", id, { from: project.status, to: u.status, fields: Object.keys(data) }, tx);
+        if (!publishing) return u;
+        await consumePost(tx, auth.userId, id);
+        return tx.project.findUniqueOrThrow({ where: { id }, include: projectListInclude }); // picks up the plan link
+      }, { maxWait: 10_000, timeout: 30_000 });
+    } catch (e) {
+      if (e instanceof BillingError) return NextResponse.json({ error: e.message, billing: e.code }, { status: e.status });
+      throw e;
+    }
 
     // Selected teams hear about a moved deadline.
     if (data.deadline instanceof Date && data.deadline.getTime() !== project.deadline.getTime()) {

@@ -59,6 +59,7 @@ export const teamInclude = {
 
 export const projectListInclude = {
   client: { select: publicUserSelect },
+  subscription: { select: { plan: true } },
   _count: { select: { applications: true, submissions: true, teams: true } },
 } satisfies Prisma.ProjectInclude;
 

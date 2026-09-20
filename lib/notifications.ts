@@ -13,7 +13,11 @@ export type NotificationType =
   | "team.declined"
   | "team.removed"
   | "team.left"
-  | "deadline.reminder";
+  | "deadline.reminder"
+  | "billing.activated"
+  | "billing.expired"
+  | "billing.reminder"
+  | "billing.refunded";
 
 /** In-app notification. Never throws — a failed notification must not break the action. */
 export async function notify(

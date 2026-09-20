@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isEmail, isString } from "@/lib/validation";
 import { isRateLimited } from "@/lib/rate-limit";
+import { getSession } from "@/lib/auth";
+import { getEntitlement } from "@/lib/billing";
 
 export async function POST(req: Request) {
   try {
@@ -21,6 +23,9 @@ export async function POST(req: Request) {
       );
     }
 
+    const session = await getSession();
+    const priority = session?.role === "CLIENT" ? (await getEntitlement(session.userId)).features.prioritySupport : false;
+
     const contactMessage = await prisma.contactMessage.create({
       data: {
         name,
@@ -28,6 +33,7 @@ export async function POST(req: Request) {
         subject: subject || null,
         message,
         type: type || "contact",
+        priority,
       },
     });
 

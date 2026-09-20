@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PROJECT_STATUSES, PROJECT_STATUS_LABEL, statusLabel } from "@/lib/enums";
 import { VerificationQueue } from "@/components/admin/VerificationQueue";
+import { PaymentsPanel } from "@/components/admin/PaymentsPanel";
 
 function UserStatus({ clientType, verificationStatus, suspendedAt }: { clientType: string | null; verificationStatus: string; suspendedAt: string | null }) {
   return (
@@ -75,11 +76,12 @@ interface Message {
   subject: string | null;
   message: string;
   type: string;
+  priority?: boolean;
   isRead: boolean;
   createdAt: string;
 }
 
-type Tab = "overview" | "verifications" | "clients" | "talents" | "projects" | "messages";
+type Tab = "overview" | "verifications" | "clients" | "talents" | "projects" | "payments" | "messages";
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -297,6 +299,7 @@ export default function AdminDashboard() {
     { id: "clients", label: "Clients", icon: "🏢" },
     { id: "talents", label: "Talent", icon: "🎓" },
     { id: "projects", label: "Projects", icon: "🚀" },
+    { id: "payments", label: "Payments", icon: "💳" },
     { id: "messages", label: "Messages", icon: "✉️" },
   ];
 
@@ -578,6 +581,9 @@ export default function AdminDashboard() {
             </div>
           )}
 
+          {/* ── PAYMENTS ── */}
+          {activeTab === "payments" && <PaymentsPanel />}
+
           {/* ── VERIFICATIONS ── */}
           {activeTab === "verifications" && <VerificationQueue onDecided={() => { void fetchAll(); }} />}
 
@@ -591,7 +597,7 @@ export default function AdminDashboard() {
                   <div key={m.id} className={`bg-white p-6 rounded-xl border shadow-sm ${!m.isRead ? 'border-l-4 border-l-gold' : ''}`}>
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <h4 className="font-bold text-navy">{m.subject || "No Subject"}</h4>
+                        <h4 className="font-bold text-navy">{m.priority && <span className="mr-2 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 align-middle">PRO · PRIORITY</span>}{m.subject || "No Subject"}</h4>
                         <p className="text-xs text-gray-500 mt-0.5">{m.name} ({m.email})</p>
                       </div>
                       <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded">{formatDate(m.createdAt)}</span>

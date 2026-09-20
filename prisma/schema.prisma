@@ -99,7 +99,21 @@ enum PaymentStatus {
   PENDING
   SUCCEEDED
   FAILED
+  CANCELLED
   REFUNDED
+}
+
+enum PlanTier {
+  STARTER
+  GROWTH
+  PRO
+}
+
+enum SubscriptionStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  EXPIRED
+  CANCELLED
 }
 
 /**
@@ -119,6 +133,9 @@ model User {
 
   verificationStatus VerificationStatus @default(UNVERIFIED)
   verifiedAt         DateTime?
+
+  // Client billing (Phase 4)
+  freePostsUsed Int @default(0) // lifetime free published projects (2 for verified clients)
 
   // Common profile
   avatarUrl String?
@@ -163,6 +180,7 @@ model User {
   verificationRequests VerificationRequest[]
   documents            Document[]
   payments             Payment[]
+  subscriptions        Subscription[]
   notifications        Notification[]
 
   @@index([role])
@@ -188,6 +206,10 @@ model Project {
   status         ProjectStatus   @default(DRAFT)
   publishedAt    DateTime?
   closedAt       DateTime?
+  subscriptionId String? // period this publish was counted against (null = free post)
+  subscription   Subscription?   @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  featured       Boolean         @default(false) // Pro perk
+  viewCount      Int             @default(0) // public detail page views (analytics perk)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
@@ -418,25 +440,58 @@ model DocumentBlob {
  * ───────────────────────── Payments ─────────────────────────
  */
 
+/// One checkout attempt. Amounts are in the smallest unit (cents).
 model Payment {
-  id                      String        @id @default(uuid())
-  projectId               String
-  project                 Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  clientId                String
-  client                  User          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  provider                String        @default("stripe")
-  providerSessionId       String?       @unique
-  providerPaymentIntentId String?       @unique
-  amountCents             Int
-  currency                String        @default("usd")
-  status                  PaymentStatus @default(PENDING)
-  receiptUrl              String?
-  createdAt               DateTime      @default(now())
-  updatedAt               DateTime      @updatedAt
+  id             String        @id @default(uuid())
+  clientId       String
+  client         User          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  projectId      String? // legacy per-listing payments; unused for subscriptions
+  project        Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  plan           PlanTier?
+  provider       String        @default("safepay")
+  providerRef    String?       @unique // Safepay tracker token
+  providerState  String? // last raw state seen from the provider
+  amountCents    Int
+  currency       String        @default("USD")
+  status         PaymentStatus @default(PENDING)
+  receiptNumber  String?       @unique // CT-2026-000123, assigned on success
+  paidAt         DateTime?
+  refundedAt     DateTime?
+  refundReason   String?
+  expiresAt      DateTime? // abandoned checkouts lapse
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  @@index([clientId])
-  @@index([projectId])
+  @@index([clientId, createdAt])
+  @@index([status])
   @@map("payments")
+}
+
+/// A prepaid 30-day plan period. A client has at most one ACTIVE period at a time.
+model Subscription {
+  id          String             @id @default(uuid())
+  clientId    String
+  client      User               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  plan        PlanTier
+  status      SubscriptionStatus @default(PENDING_PAYMENT)
+  periodStart DateTime?
+  periodEnd   DateTime?
+  postsUsed   Int                @default(0)
+  postLimit   Int? // null = unlimited (Pro)
+  cancelledAt DateTime?
+  reminded5At DateTime? // expiry reminders sent
+  reminded1At DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  payments Payment[]
+  projects Project[]
+
+  @@index([clientId, status])
+  @@index([status, periodEnd])
+  @@map("subscriptions")
 }
 
 /**
@@ -485,6 +540,7 @@ model ContactMessage {
   subject   String?
   message   String
   type      String   @default("contact") // contact, client_query
+  priority  Boolean  @default(false) // sent by a Pro client
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 

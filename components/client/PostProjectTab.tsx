@@ -4,10 +4,12 @@ import { useState } from "react";
 import { Btn, Field, Notice, SectionHeader, inputStyle, selectStyle, textareaStyle } from "@/components/dashboard/ui";
 import { api } from "@/components/dashboard/useDashboardData";
 import { PROJECT_CATEGORIES, PROJECT_CATEGORY_LABEL, TEAM_CAP_DEFAULT, TEAM_CAP_MAX, TEAM_CAP_MIN, type ProjectCategory } from "@/lib/enums";
+import { PlanRequiredModal } from "@/components/client/PlanRequiredModal";
 
 const EMPTY = { title: "", description: "", category: "" as ProjectCategory | "", requiredSkills: "", deliverables: "", deadline: "", teamCap: TEAM_CAP_DEFAULT, draft: false };
 
-export function PostProjectTab({ clientName, onCreated, verified }: { clientName: string; onCreated: () => void; verified: boolean }) {
+export function PostProjectTab({ clientName, onCreated, verified, billing }: { clientName: string; onCreated: () => void; verified: boolean; billing?: { canPost: boolean; reason: string; freePostsLeft: number; postsLeftInPeriod: number | null } }) {
+  const [planModal, setPlanModal] = useState<"PLAN_REQUIRED" | "LIMIT_REACHED" | null>(null);
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -18,10 +20,11 @@ export function PostProjectTab({ clientName, onCreated, verified }: { clientName
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null); setBusy(true);
-    const res = await api<{ notice?: string | null }>("/api/projects", "POST", form);
+    const res = await api<{ notice?: string | null; billing?: string }>("/api/projects", "POST", form);
     setBusy(false);
     if (!res.ok) { setError(res.error ?? "Could not create the project"); return; }
     setForm(EMPTY);
+    if (res.data?.billing === "PLAN_REQUIRED" || res.data?.billing === "LIMIT_REACHED") { setPlanModal(res.data.billing); return; }
     if (res.data?.notice) alert(res.data.notice);
     onCreated();
   }
@@ -30,6 +33,9 @@ export function PostProjectTab({ clientName, onCreated, verified }: { clientName
     <div>
       <SectionHeader icon="➕" title="Post a project" subtitle="Describe the work, the skills it needs and what must be delivered. Talent will apply as individuals or teams." />
       {!verified && <Notice kind="warning">Your account isn&apos;t verified yet, so this will be saved as a <strong>draft</strong>. You can publish it as soon as verification is approved.</Notice>}
+      {verified && billing && !billing.canPost && <Notice kind="warning">{billing.reason === "LIMIT_REACHED" ? "Your plan's posts for this period are used up — this will be saved as a draft until you upgrade." : "You've used your free posts — this will be saved as a draft until you choose a plan."}</Notice>}
+      {verified && billing?.canPost && <Notice kind="info">{billing.reason === "FREE" ? `Publishing uses 1 of your ${billing.freePostsLeft} remaining free post${billing.freePostsLeft === 1 ? "" : "s"}.` : billing.postsLeftInPeriod === null ? "Your plan has unlimited posts." : `Publishing uses 1 of ${billing.postsLeftInPeriod} post${billing.postsLeftInPeriod === 1 ? "" : "s"} left in this period.`}</Notice>}
+      {planModal && <PlanRequiredModal reason={planModal} onClose={() => { setPlanModal(null); onCreated(); }} />}
       <div style={{ height: 8 }} />
       <div className="mobile-dashboard-two-col" style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24 }}>
         <form onSubmit={submit}>
@@ -67,7 +73,7 @@ export function PostProjectTab({ clientName, onCreated, verified }: { clientName
               Save as a draft — don&apos;t publish yet (you can publish from My Projects)
             </label>
           )}
-          <Btn type="submit" disabled={busy} style={{ width: "100%", padding: "14px 0", fontSize: 15 }}>{busy ? "Saving…" : verified && !form.draft ? "Publish project" : "Save as draft"}</Btn>
+          <Btn type="submit" disabled={busy} style={{ width: "100%", padding: "14px 0", fontSize: 15 }}>{busy ? "Saving…" : verified && !form.draft && (billing?.canPost ?? true) ? "Publish project" : "Save as draft"}</Btn>
           {error && <Notice kind="error">{error}</Notice>}
         </form>
 

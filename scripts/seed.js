@@ -82,6 +82,7 @@ async function main() {
     emailVerifiedAt: new Date(),
     verificationStatus: "VERIFIED",
     verifiedAt: new Date(),
+    freePostsUsed: 2, // both free posts already used; Acme is on a paid plan (seeded below)
     bio: "A Lahore design and development studio. We post small, real client tasks that our team doesn't have bandwidth for.",
     website: "https://acmestudio.pk",
     location: "Lahore, Pakistan",
@@ -98,6 +99,7 @@ async function main() {
     clientType: "INDIVIDUAL",
     emailVerifiedAt: new Date(),
     verificationStatus: "UNVERIFIED",
+    freePostsUsed: 0,
     bio: "Independent consultant. I post research and content tasks for my clients' marketing.",
     location: "Karachi, Pakistan",
   });
@@ -184,7 +186,7 @@ async function main() {
   ];
 
   // Drop accounts and projects left behind by automated smoke tests.
-  await prisma.user.deleteMany({ where: { OR: [{ email: { startsWith: "smoke2+" } }, { email: { startsWith: "newbie+" } }, { email: { startsWith: "uitest.org." } }] } });
+  await prisma.user.deleteMany({ where: { OR: [{ email: { startsWith: "smoke" } }, { email: { startsWith: "newbie+" } }, { email: { startsWith: "uitest." } }] } });
   const smoke = await prisma.project.findMany({ where: { OR: [{ title: { startsWith: "Smoke" } }, { title: { startsWith: "UI test" } }] }, select: { id: true } });
   for (const sp of smoke) { await prisma.certificate.deleteMany({ where: { projectId: sp.id } }); await prisma.project.delete({ where: { id: sp.id } }); }
 
@@ -288,6 +290,24 @@ async function main() {
     },
   });
 
+  /* ── Billing: Acme is 12 days into a Growth plan with one paid receipt ── */
+  await prisma.payment.deleteMany({ where: { clientId: { in: [acme.id, ali.id] } } });
+  await prisma.subscription.deleteMany({ where: { clientId: { in: [acme.id, ali.id] } } });
+  const growth = await prisma.subscription.create({
+    data: { clientId: acme.id, plan: "GROWTH", status: "ACTIVE", periodStart: daysFromNow(-12), periodEnd: daysFromNow(18), postLimit: 15, postsUsed: 2 },
+  });
+  await prisma.payment.create({
+    data: {
+      clientId: acme.id, subscriptionId: growth.id, plan: "GROWTH", provider: "safepay", providerRef: `seed_${growth.id}`, providerState: "TRACKER_ENDED",
+      amountCents: 1000, currency: "USD", status: "SUCCEEDED", receiptNumber: `CT-${new Date().getFullYear()}-000001`, paidAt: daysFromNow(-12), createdAt: daysFromNow(-12),
+    },
+  });
+  // The two live Acme projects count against this period; the older ones were free posts.
+  await prisma.project.updateMany({ where: { id: { in: [bakery.id, api.id] } }, data: { subscriptionId: growth.id, viewCount: 37 } });
+  await prisma.project.update({ where: { id: bakery.id }, data: { featured: true, viewCount: 112 } });
+
+  // Contact messages: reset to the single demo message (drops smoke/UI-test leftovers).
+  await prisma.contactMessage.deleteMany({});
   await prisma.contactMessage.create({
     data: { name: "Fatima N.", email: "fatima@example.com", subject: "Onboarding my NGO", message: "We run a literacy NGO and want to post a few design tasks. What documents do you need for verification?", type: "client_query" },
   });
@@ -295,7 +315,7 @@ async function main() {
   console.log(`
 Done. Sign in with password "${PASSWORD}":
 
-  Client (organization, verified)   projects@acmestudio.pk
+  Client (organization, verified, Growth plan)  projects@acmestudio.pk
   Client (individual, unverified)   ali.raza@example.com
   Talent (verified, 1 certificate)  ayesha.khan@example.com
   Talent (verification pending, team invite waiting)  bilal.ahmed@example.com

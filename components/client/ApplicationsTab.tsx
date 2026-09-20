@@ -6,12 +6,25 @@ import { Btn, Card, EmptyState, Notice, SectionHeader, StatusBadge, Verification
 import { api } from "@/components/dashboard/useDashboardData";
 import type { ApplicationDto, ProjectDto } from "@/lib/types";
 
-export function ApplicationsTab({ applications, projects, onChanged }: { applications: ApplicationDto[]; projects: ProjectDto[]; onChanged: () => void }) {
+import type { ClientTab } from "@/app/client/dashboard/page";
+
+export function ApplicationsTab({ applications, projects, onChanged, filtersEnabled, goTo }: { applications: ApplicationDto[]; projects: ProjectDto[]; onChanged: () => void; filtersEnabled?: boolean; goTo?: (t: ClientTab) => void }) {
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [skill, setSkill] = useState("");
+  const [minTeam, setMinTeam] = useState(1);
   const [filter, setFilter] = useState<string>("all");
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const visible = applications.filter(a => filter === "all" || a.projectId === filter);
+  const visible = applications.filter(a => {
+    if (filter !== "all" && a.projectId !== filter) return false;
+    if (!filtersEnabled) return true;
+    const members = a.team.members.filter(m => m.status === "ACCEPTED");
+    if (verifiedOnly && !members.every(m => m.user.verificationStatus === "VERIFIED")) return false;
+    if (members.length < minTeam) return false;
+    if (skill.trim() && !a.pitch.toLowerCase().includes(skill.trim().toLowerCase())) return false;
+    return true;
+  });
 
   async function decide(id: string, status: "SHORTLISTED" | "SELECTED" | "REJECTED") {
     setError(null); setBusyId(id);
@@ -32,6 +45,20 @@ export function ApplicationsTab({ applications, projects, onChanged }: { applica
         ) : undefined}
       />
       {error && <Notice kind="error">{error}</Notice>}
+
+      {filtersEnabled ? (
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", padding: "10px 14px", border: "1px solid var(--border)", borderRadius: 10, background: "#FAFAFA", marginBottom: 16, fontSize: 13 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-subtle)", textTransform: "uppercase", letterSpacing: 1 }}>Filters</span>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}><input id="f-verified-only" type="checkbox" checked={verifiedOnly} onChange={e => setVerifiedOnly(e.target.checked)} /> All members verified</label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>Min team size <input id="f-min-team" type="number" min={1} max={20} value={minTeam} onChange={e => setMinTeam(Math.max(1, parseInt(e.target.value) || 1))} style={{ width: 60, padding: "4px 6px", border: "1px solid var(--border)", borderRadius: 6 }} /></label>
+          <input id="f-pitch" value={skill} onChange={e => setSkill(e.target.value)} placeholder="Pitch mentions… (e.g. React)" style={{ flex: "1 1 180px", padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 6 }} />
+        </div>
+      ) : (
+        <div style={{ padding: "10px 14px", border: "1px dashed var(--border)", borderRadius: 10, marginBottom: 16, fontSize: 12, color: "var(--ink-subtle)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span>Applicant filters (verified members, team size, pitch keywords) are available on the Growth and Pro plans.</span>
+          {goTo && <button onClick={() => goTo("billing")} style={{ fontSize: 12, fontWeight: 700, color: "var(--navy)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>See plans</button>}
+        </div>
+      )}
 
       {visible.length === 0 ? (
         <EmptyState icon="📬" title="No applications yet" hint="Applications appear here as soon as talent applies to your projects." />

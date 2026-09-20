@@ -55,11 +55,11 @@ export async function signOut() {
 }
 
 /** POST/PATCH JSON and return { ok, error, data }. */
-export async function api<T = unknown>(url: string, method: "POST" | "PATCH" | "DELETE", body?: unknown): Promise<{ ok: boolean; error?: string; data?: T }> {
+export async function api<T = unknown>(url: string, method: "POST" | "PATCH" | "DELETE", body?: unknown): Promise<{ ok: boolean; error?: string; code?: string; data?: T }> {
   try {
     const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
     const json = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: json.error ?? `Request failed (${res.status})` };
+    if (!res.ok) return { ok: false, error: json.error ?? `Request failed (${res.status})`, code: json.billing ?? json.code };
     return { ok: true, data: json as T };
   } catch {
     return { ok: false, error: "Network error. Please try again." };

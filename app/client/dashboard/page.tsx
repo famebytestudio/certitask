@@ -13,8 +13,9 @@ import { ApplicationsTab } from "@/components/client/ApplicationsTab";
 import { SubmissionsTab } from "@/components/client/SubmissionsTab";
 import { CertificatesTab } from "@/components/client/CertificatesTab";
 import { ProfileTab } from "@/components/client/ProfileTab";
+import { BillingTab } from "@/components/client/BillingTab";
 
-const TAB_IDS = ["overview", "post-project", "projects", "applications", "submissions", "certificates", "verification", "profile"] as const;
+const TAB_IDS = ["overview", "post-project", "projects", "applications", "submissions", "certificates", "verification", "billing", "profile"] as const;
 export type ClientTab = (typeof TAB_IDS)[number];
 
 function ClientDashboard() {
@@ -37,6 +38,7 @@ function ClientDashboard() {
     { id: "submissions",  label: "Review Submissions", icon: "📤", badge: reviewQueue, badgeColor: "#E53E3E" },
     { id: "certificates", label: "Issued Certificates", icon: "🏅" },
     { id: "verification", label: "Verification",      icon: "🪪", badge: profile.verificationStatus === "VERIFIED" ? 0 : 1, badgeColor: profile.verificationStatus === "PENDING_REVIEW" ? "#97640E" : "#E53E3E" },
+    { id: "billing",      label: "Billing & Plan",    icon: "💳" },
     { id: "profile",      label: "Edit Profile",      icon: "✏️" },
   ];
 
@@ -68,12 +70,13 @@ function ClientDashboard() {
       }
     >
       {tab === "overview"     && <OverviewTab data={data} goTo={setTab} onChanged={refresh} />}
-      {tab === "post-project" && <PostProjectTab clientName={profile.name} verified={profile.verificationStatus === "VERIFIED"} onCreated={() => { void refresh(); setTab("projects"); }} />}
-      {tab === "projects"     && <ProjectsTab projects={projects} applications={applications} goTo={setTab} onChanged={refresh} verified={profile.verificationStatus === "VERIFIED"} />}
-      {tab === "applications" && <ApplicationsTab applications={applications} projects={projects} onChanged={refresh} />}
+      {tab === "post-project" && <PostProjectTab clientName={profile.name} verified={profile.verificationStatus === "VERIFIED"} billing={data.entitlement ?? undefined} onCreated={() => { void refresh(); setTab("projects"); }} />}
+      {tab === "projects"     && <ProjectsTab projects={projects} applications={applications} goTo={setTab} onChanged={refresh} verified={profile.verificationStatus === "VERIFIED"} features={data.entitlement?.features} />}
+      {tab === "applications" && <ApplicationsTab applications={applications} projects={projects} onChanged={refresh} filtersEnabled={!!data.entitlement?.features.applicantFilters} goTo={setTab} />}
       {tab === "submissions"  && <SubmissionsTab submissions={submissions} onChanged={refresh} />}
       {tab === "certificates" && <CertificatesTab certificates={certificates} onChanged={refresh} />}
       {tab === "verification" && <VerificationTab profile={profile} onChanged={refresh} />}
+      {tab === "billing"      && <BillingTab onChanged={refresh} />}
       {tab === "profile"      && <ProfileTab profile={profile} onSaved={refresh} />}
     </DashboardShell>
   );

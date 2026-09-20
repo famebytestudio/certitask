@@ -116,6 +116,7 @@ export default function ProjectsPage() {
                       <div className="space-y-4">
                         <div>
                           <span className="text-[10px] font-bold text-gold uppercase tracking-wider bg-gold/10 px-2 py-0.5 rounded border border-gold/10">{PROJECT_CATEGORY_LABEL[p.category]}</span>
+                          {p.featured && <span className="ml-2 text-[10px] font-bold text-navy uppercase tracking-wider bg-gold px-2 py-0.5 rounded">★ Featured</span>}
                           <h3 className="font-sans font-bold text-xl text-navy mt-2 leading-snug"><Link href={`/projects/${p.id}`} className="hover:text-gold">{p.title}</Link></h3>
                           {p.client && (
                             <p className="text-xs font-semibold text-ink/60 mt-1">

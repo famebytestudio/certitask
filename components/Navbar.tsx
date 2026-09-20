@@ -27,6 +27,7 @@ export const Navbar = () => {
     { name: "Home", href: "/" },
     { name: "How It Works", href: "/how-it-works" },
     { name: "Clients", href: "/clients" },
+    { name: "Pricing", href: "/pricing" },
     { name: "Browse Projects", href: "/projects" },
     { name: "Verify Certificate", href: "/verify" },
     { name: "Contact", href: "/contact" },

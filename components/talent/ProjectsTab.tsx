@@ -99,6 +99,7 @@ export function ProjectsTab({ projects, applications, submissions, teams, onChan
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
                   <div style={{ minWidth: 0 }}>
                     <span style={{ fontSize: 10, fontWeight: 700, color: "var(--gold)", textTransform: "uppercase" }}>{PROJECT_CATEGORY_LABEL[p.category]}</span>
+                    {p.featured && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, color: "var(--navy)", background: "var(--gold)", padding: "2px 8px", borderRadius: 6, textTransform: "uppercase" }}>★ Featured</span>}
                     <h4 style={{ fontSize: 17, fontWeight: 700, color: "var(--navy)", margin: "2px 0 4px" }}>
                       <Link href={`/projects/${p.id}`} style={{ color: "inherit", textDecoration: "none" }}>{p.title}</Link>
                     </h4>

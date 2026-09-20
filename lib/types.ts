@@ -64,6 +64,9 @@ export interface ProjectDto {
   status: ProjectStatus;
   publishedAt: string | null;
   closedAt?: string | null;
+  featured?: boolean;
+  viewCount?: number;
+  subscription?: { plan: "STARTER" | "GROWTH" | "PRO" } | null;
   createdAt: string;
   client?: { id: string; name: string; clientType: ClientType | null; avatarUrl: string | null; verificationStatus: VerificationStatus };
   _count?: { applications: number; submissions: number; teams?: number };
@@ -156,4 +159,16 @@ export interface DashboardResponse {
   certificates: CertificateDto[];
   certificateHolds: CertificateHoldDto[];
   teams: TeamFullDto[];
+  entitlement: EntitlementDto | null;
+}
+
+export interface EntitlementDto {
+  verified: boolean;
+  freePostsUsed: number;
+  freePostsLeft: number;
+  postsLeftInPeriod: number | null;
+  canPost: boolean;
+  reason: "FREE" | "SUBSCRIPTION" | "NOT_VERIFIED" | "PLAN_REQUIRED" | "LIMIT_REACHED";
+  subscription: { id: string; plan: "STARTER" | "GROWTH" | "PRO"; periodEnd: string | null; postsUsed: number; postLimit: number | null } | null;
+  features: { applicantFilters: boolean; priorityVisibility: boolean; analytics: boolean; featured: boolean; prioritySupport: boolean };
 }

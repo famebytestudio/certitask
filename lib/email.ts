@@ -120,3 +120,17 @@ ${url}`,
     html: layout("Deadline in 3 days", `<p>Hi ${name},</p><p>Your team's submission for <strong>${projectTitle}</strong> is due on <strong>${when}</strong>.</p>${button(url, "Submit deliverables")}`),
   });
 }
+
+export function sendReceiptEmail(to: string, name: string, planName: string, amount: string, receiptNumber: string, billingUrl: string) {
+  return sendEmail({
+    to,
+    subject: `Receipt ${receiptNumber} — CertiTask ${planName} plan`,
+    text: `Hi ${name},
+
+Thanks for your payment of ${amount} for the CertiTask ${planName} plan (30 days). Receipt number: ${receiptNumber}.
+
+Download the receipt and manage your plan here:
+${billingUrl}`,
+    html: layout("Payment received", `<p>Hi ${name},</p><p>Thanks for your payment of <strong>${amount}</strong> for the <strong>${planName}</strong> plan (30 days).</p><p>Receipt number: <strong>${receiptNumber}</strong></p>${button(billingUrl, "View billing")}`),
+  });
+}

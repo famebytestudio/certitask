@@ -4,6 +4,7 @@ import { audit } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
 import { sendDeadlineReminderEmail } from "@/lib/email";
 import { appUrl } from "@/lib/email-verification";
+import { runBillingMaintenance } from "@/lib/billing";
 
 const REMINDER_DAYS = 3;
 
@@ -56,5 +57,8 @@ export async function GET(req: Request) {
     reminded++;
   }
 
-  return NextResponse.json({ expiredInvitations: expiredMembers.count + expiredInvites.count, closedProjects: toClose.length, remindedTeams: reminded });
+  // 4. billing periods
+  const billing = await runBillingMaintenance();
+
+  return NextResponse.json({ expiredInvitations: expiredMembers.count + expiredInvites.count, closedProjects: toClose.length, remindedTeams: reminded, billing });
 }
