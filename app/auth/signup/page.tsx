@@ -75,6 +75,7 @@ const STRENGTH_CLASS = ["", "weak", "fair", "good", "strong"];
 export default function SignupPage() {
   const router = useRouter();
 
+  const [role, setRole] = useState<"company" | "student">("company");
   const [role, setRole] = useState<"client" | "talent">("talent");
   const [clientType, setClientType] = useState<"INDIVIDUAL" | "ORGANIZATION">("INDIVIDUAL");
   const [fullName, setFullName] = useState("");
@@ -87,6 +88,22 @@ export default function SignupPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const strength = getPasswordStrength(password);
+
+  function resetFormState() {
+    setFullName("");
+    setEmail("");
+    setPassword("");
+    setConfirm("");
+    setShowPass(false);
+    setShowConfirm(false);
+    setLoading(false);
+    setErrors({});
+  }
+
+  function handleRoleChange(nextRole: "company" | "student") {
+    setRole(nextRole);
+    resetFormState();
+  }
 
   function validate() {
     const errs: Record<string, string> = {};
@@ -111,6 +128,7 @@ export default function SignupPage() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, fullName, role }),
         body: JSON.stringify({ email, password, fullName, role, clientType: role === "client" ? clientType : undefined }),
       });
 
@@ -122,6 +140,7 @@ export default function SignupPage() {
         return;
       }
 
+      router.push(role === "company" ? "/company/dashboard" : "/student/dashboard");
       router.push(role === "client" ? "/client/dashboard" : "/talent/dashboard");
       router.refresh();
     } catch {
@@ -150,6 +169,8 @@ export default function SignupPage() {
               Certification.
             </h1>
             <p className="brand-sub">
+              Whether you&apos;re a company managing compliance or a student
+              building credentials, CertiTask has you covered.
               Post real work and issue certificates, or do the work and
               earn credentials anyone can verify.
             </p>
@@ -183,34 +204,47 @@ export default function SignupPage() {
 
           <div className="auth-card">
             <h2 className="auth-heading">Create your account</h2>
+            <p className="auth-sub">Choose your role to get started</p>
             <p className="auth-sub">What brings you to CertiTask?</p>
 
             {/* Role cards */}
             <div className="role-cards">
               <button
                 type="button"
+                id="role-company"
+                className={`role-card${role === "company" ? " selected" : ""}`}
+                onClick={() => handleRoleChange("company")}
                 id="role-talent"
                 className={`role-card${role === "talent" ? " selected" : ""}`}
                 onClick={() => setRole("talent")}
                 aria-pressed={role === "talent"}
               >
                 <div className="role-card-icon">
+                  <BuildingIcon size={22} />
                   <GradCapIcon size={22} />
                 </div>
+                <span className="role-card-label">Company</span>
+                <span className="role-card-desc">Issue & manage certifications for your team</span>
                 <span className="role-card-label">Talent</span>
                 <span className="role-card-desc">Do real projects and earn verifiable certificates</span>
               </button>
 
               <button
                 type="button"
+                id="role-student"
+                className={`role-card${role === "student" ? " selected" : ""}`}
+                onClick={() => handleRoleChange("student")}
                 id="role-client"
                 className={`role-card${role === "client" ? " selected" : ""}`}
                 onClick={() => setRole("client")}
                 aria-pressed={role === "client"}
               >
                 <div className="role-card-icon">
+                  <GradCapIcon size={22} />
                   <BuildingIcon size={22} />
                 </div>
+                <span className="role-card-label">Student</span>
+                <span className="role-card-desc">Earn & showcase your certifications</span>
                 <span className="role-card-label">Client</span>
                 <span className="role-card-desc">Post projects and issue certificates for completed work</span>
               </button>
@@ -237,6 +271,7 @@ export default function SignupPage() {
 
               {/* Full Name */}
               <div className="form-group">
+                <label className="form-label" htmlFor="signup-name">Full name</label>
                 <label className="form-label" htmlFor="signup-name">{role === "client" && clientType === "ORGANIZATION" ? "Organization name" : "Full name"}</label>
                 <div className="input-wrap">
                   <span className="input-icon"><UserIcon /></span>
@@ -337,6 +372,7 @@ export default function SignupPage() {
                 {loading ? (
                   <><span className="spinner" />Creating account…</>
                 ) : (
+                  `Create ${role === "company" ? "Company" : "Student"} Account`
                   `Create ${role === "client" ? "client" : "talent"} account`
                 )}
               </button>

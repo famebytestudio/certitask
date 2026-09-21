@@ -54,6 +54,7 @@ function GradCapIcon() {
 export default function LoginPage() {
   const router = useRouter();
 
+  const [role, setRole] = useState<"company" | "student">("company");
   const [role, setRole] = useState<"client" | "talent">("talent");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -83,6 +84,7 @@ export default function LoginPage() {
 
       // Redirect based on user role from Neon DB or selected tab
       const destRole = data.user?.role || role;
+      router.push(destRole === "student" ? "/student/dashboard" : "/company/dashboard");
       const next = new URLSearchParams(window.location.search).get("next");
       if (destRole === "admin") router.push("/admin/dashboard");
       else if (next && next.startsWith("/") && !next.startsWith("//")) router.push(next);
@@ -121,6 +123,8 @@ export default function LoginPage() {
               <em>Simplified.</em>
             </h1>
             <p className="brand-sub">
+              The platform that connects companies and students through
+              seamless certification management and task tracking.
               Real projects from clients, real proof for talent. Sign in to
               post work, do work, or manage your certificates.
             </p>
@@ -166,23 +170,33 @@ export default function LoginPage() {
               <button
                 type="button"
                 role="tab"
+                className={`role-tab${role === "company" ? " active" : ""}`}
+                onClick={() => setRole("company")}
+                aria-selected={role === "company"}
+                id="tab-company-login"
                 className={`role-tab${role === "client" ? " active" : ""}`}
                 onClick={() => setRole("client")}
                 aria-selected={role === "client"}
                 id="tab-client-login"
               >
                 <BuildingIcon />
+                Company
                 Client
               </button>
               <button
                 type="button"
                 role="tab"
+                className={`role-tab${role === "student" ? " active" : ""}`}
+                onClick={() => setRole("student")}
+                aria-selected={role === "student"}
+                id="tab-student-login"
                 className={`role-tab${role === "talent" ? " active" : ""}`}
                 onClick={() => setRole("talent")}
                 aria-selected={role === "talent"}
                 id="tab-talent-login"
               >
                 <GradCapIcon />
+                Student
                 Talent
               </button>
             </div>
@@ -267,6 +281,7 @@ export default function LoginPage() {
                     Signing in…
                   </>
                 ) : (
+                  `Sign in as ${role === "company" ? "Company" : "Student"}`
                   `Sign in as ${role === "client" ? "client" : "talent"}`
                 )}
               </button>
