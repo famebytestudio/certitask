@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Badge, Button, Chips, EmptyState, KeyValue, LoadingRows, PageHeader, Row, SearchInput, Select, StatusBadge, Table, Td, Th, Toolbar, adminApi, fmtDateTime, useConfirm, useDebounced, useToast } from "./ui";
 
 interface Doc { id: string; type: string; mimeType: string; sizeBytes: number; createdAt: string }
 interface Req {
@@ -9,163 +10,138 @@ interface Req {
   user: { id: string; name: string; email: string; role: string; clientType: string | null; website: string | null; location: string | null; createdAt: string; emailVerifiedAt: string | null };
   documents: Doc[];
 }
+export interface VerificationsQuery extends Record<string, string | undefined> { status?: string; kind?: string; q?: string; request?: string }
 
 const DOC_LABEL: Record<string, string> = { ID_FRONT: "ID front", ID_BACK: "ID back", ORG_REGISTRATION: "Registration document", OTHER: "Other" };
-const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
 
-/** Admin review queue for identity / organization verification (Phase 2). */
-export function VerificationQueue({ onDecided }: { onDecided: () => void }) {
-  const [filter, setFilter] = useState<"PENDING_REVIEW" | "VERIFIED" | "REJECTED" | "ALL">("PENDING_REVIEW");
+/** Admin review queue for identity / organization verification. */
+export function VerificationQueue({ query, setQuery, onDecided, openUser }: { query: VerificationsQuery; setQuery: (q: VerificationsQuery) => void; onDecided: () => void; openUser: (id: string) => void }) {
+  const filter = query.status ?? "PENDING_REVIEW";
+  const [q, setQ] = useState(query.q ?? "");
+  const dq = useDebounced(q, 300);
   const [requests, setRequests] = useState<Req[]>([]);
   const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState<Req | null>(null);
-  const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
+  const { toast } = useToast();
+  useEffect(() => { if ((query.q ?? "") !== dq) setQuery({ ...query, q: dq || undefined }); }, [dq]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`/api/admin/verifications?status=${filter}`, { cache: "no-store" });
-    if (res.ok) setRequests((await res.json()).requests ?? []);
+    const p = new URLSearchParams({ status: filter });
+    if (query.kind) p.set("kind", query.kind); if (dq) p.set("q", dq);
+    const r = await adminApi<{ requests: Req[] }>(`/api/admin/verifications?${p}`);
+    if (r.ok && r.data) setRequests(r.data.requests ?? []);
     setLoading(false);
-  }, [filter]);
+  }, [filter, query.kind, dq]);
   useEffect(() => { const t = setTimeout(() => { void load(); }, 0); return () => clearTimeout(t); }, [load]);
+
+  const open = requests.find(r => r.id === query.request) ?? null;
 
   async function decide(decision: "APPROVE" | "REJECT") {
     if (!open) return;
-    if (decision === "APPROVE" && !confirm(`Approve ${open.user.name}? Their legal name will be set to "${open.formData?.legalName}" and any held certificates will be issued.`)) return;
-    setBusy(true); setError(null);
-    const res = await fetch(`/api/admin/verifications/${open.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, reason }) });
-    const json = await res.json().catch(() => ({}));
+    const r = decision === "APPROVE"
+      ? await confirm({ title: `Approve ${open.user.name}?`, body: <>Their legal name becomes <strong>{open.formData?.legalName}</strong>, the Verified badge appears on their profile and any held certificates are issued.</>, confirmLabel: "Approve" })
+      : await confirm({ title: `Reject ${open.user.name}'s request?`, body: "They are emailed the reason and can resubmit.", confirmLabel: "Reject", tone: "danger", reason: { label: "Reason (sent to the applicant)", required: true, placeholder: "e.g. The name on the ID does not match the legal name typed." } });
+    if (!r.ok) return;
+    setBusy(true);
+    const res = await adminApi(`/api/admin/verifications/${open.id}`, "PATCH", { decision, reason: r.reason });
     setBusy(false);
-    if (!res.ok) { setError(json.error ?? "Failed"); return; }
-    setOpen(null); setReason("");
-    await load();
-    onDecided();
+    if (!res.ok) { toast("error", res.error ?? "Failed"); return; }
+    toast("success", decision === "APPROVE" ? `${open.user.name} is now verified` : "Request rejected");
+    setQuery({ ...query, request: undefined });
+    await load(); onDecided();
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {(["PENDING_REVIEW", "VERIFIED", "REJECTED", "ALL"] as const).map(f => (
-          <button key={f} onClick={() => setFilter(f)} className={`px-3 py-1.5 rounded-full text-xs font-bold border ${filter === f ? "bg-navy text-white border-navy" : "bg-white text-gray-700 border-gray-200 hover:border-navy"}`}>
-            {f === "PENDING_REVIEW" ? "Pending" : f === "ALL" ? "All" : f.charAt(0) + f.slice(1).toLowerCase()}
-          </button>
-        ))}
-      </div>
+    <div>
+      <PageHeader title="Verifications" subtitle="Identity and organization checks. Approving sets the legal name that is printed on certificates." />
+      <Toolbar>
+        <SearchInput value={q} onChange={setQ} placeholder="Search applicant…" className="w-full sm:w-64" />
+        <Chips value={filter} onChange={v => setQuery({ ...query, status: v === "PENDING_REVIEW" ? undefined : v, request: undefined })} options={[{ value: "PENDING_REVIEW", label: "Pending" }, { value: "VERIFIED", label: "Approved" }, { value: "REJECTED", label: "Rejected" }, { value: "ALL", label: "All" }]} />
+        <Select aria-label="Kind" value={query.kind ?? ""} onChange={v => setQuery({ ...query, kind: v || undefined })} options={[{ value: "", label: "Identity & organization" }, { value: "IDENTITY", label: "Identity only" }, { value: "ORGANIZATION", label: "Organization only" }]} />
+      </Toolbar>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-gray-50 text-gray-600 font-semibold border-b">
-              <tr>
-                <th className="px-6 py-4">Applicant</th>
-                <th className="px-6 py-4">Kind</th>
-                <th className="px-6 py-4">Legal name on request</th>
-                <th className="px-6 py-4">Submitted</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {loading ? (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">Loading…</td></tr>
-              ) : requests.length === 0 ? (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">{filter === "PENDING_REVIEW" ? "Queue is empty. 🎉" : "Nothing here."}</td></tr>
-              ) : requests.map(r => (
-                <tr key={r.id} className="hover:bg-gray-50/50">
-                  <td className="px-6 py-4">
-                    <div className="font-medium text-navy">{r.user.name}</div>
-                    <div className="text-xs text-gray-500">{r.user.email} · {r.user.role === "CLIENT" ? `Client (${r.user.clientType === "ORGANIZATION" ? "org" : "individual"})` : "Talent"}</div>
-                  </td>
-                  <td className="px-6 py-4 text-gray-600">{r.kind === "ORGANIZATION" ? "Organization" : "Identity"}</td>
-                  <td className="px-6 py-4 text-gray-600">{r.formData?.legalName ?? "—"}<div className="text-xs text-gray-400">{r.formData?.idType} ···{r.formData?.idLast4}</div></td>
-                  <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{fmt(r.submittedAt)}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${r.status === "VERIFIED" ? "bg-green-100 text-green-700" : r.status === "REJECTED" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>{r.status.replace("_", " ")}</span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button onClick={() => { setOpen(r); setReason(""); setError(null); }} className="text-blue-600 hover:text-blue-800 font-medium">{r.status === "PENDING_REVIEW" ? "Review" : "View"}</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div className={`grid grid-cols-1 gap-4 ${open ? "xl:grid-cols-5" : ""}`}>
+        <div className={open ? "xl:col-span-2" : ""}>
+          <Table busy={loading} head={<><Th>Applicant</Th><Th>Kind</Th><Th>Submitted</Th><Th right>Status</Th></>} minWidth={520}>
+            {loading && requests.length === 0 ? <LoadingRows cols={4} /> : requests.length === 0 ? (
+              <tr><td colSpan={4}><EmptyState icon="idcard" title={filter === "PENDING_REVIEW" ? "Queue is empty" : "Nothing here"} hint={filter === "PENDING_REVIEW" ? "New submissions appear here the moment a user uploads their documents." : undefined} /></td></tr>
+            ) : requests.map(r => (
+              <Row key={r.id} onClick={() => setQuery({ ...query, request: r.id })} active={open?.id === r.id}>
+                <Td><div className="font-semibold text-navy">{r.user.name}</div><div className="text-xs text-slate-500">{r.user.email} · {r.user.role === "CLIENT" ? `client (${r.user.clientType === "ORGANIZATION" ? "org" : "individual"})` : "talent"}</div></Td>
+                <Td className="text-sm text-slate-600">{r.kind === "ORGANIZATION" ? "Organization" : "Identity"}<div className="text-xs text-slate-400">{r.formData?.idType} ···{r.formData?.idLast4}</div></Td>
+                <Td className="whitespace-nowrap text-xs text-slate-500">{fmtDateTime(r.submittedAt)}</Td>
+                <Td right><StatusBadge status={r.status} /></Td>
+              </Row>
+            ))}
+          </Table>
         </div>
-      </div>
 
-      {open && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setOpen(null)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
-            <div className="p-5 border-b flex justify-between items-start gap-4">
-              <div>
-                <h3 className="text-lg font-bold text-navy">{open.kind === "ORGANIZATION" ? "Organization verification" : "Identity verification"} — {open.user.name}</h3>
-                <p className="text-xs text-gray-500">{open.user.email} · account created {fmt(open.user.createdAt)} · email {open.user.emailVerifiedAt ? "confirmed" : "NOT confirmed"}</p>
-              </div>
-              <button onClick={() => setOpen(null)} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
-            </div>
-
-            <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-1 space-y-3 text-sm">
-                <div className="font-bold text-navy text-xs uppercase tracking-wide">What they typed</div>
-                <Row k={open.kind === "ORGANIZATION" ? "Organization legal name" : "Legal name"} v={open.formData?.legalName} />
-                {open.kind === "ORGANIZATION" && <Row k="Registration no." v={open.formData?.registrationNumber} />}
-                {open.kind === "ORGANIZATION" && <Row k="Authorized person" v={open.formData?.authorizedPersonName} />}
-                <Row k="ID type" v={open.formData?.idType} />
-                <Row k="ID ends with" v={open.formData?.idLast4 ? `···${open.formData.idLast4}` : undefined} />
-                <div className="font-bold text-navy text-xs uppercase tracking-wide pt-3">Profile</div>
-                <Row k="Display name" v={open.user.name} />
-                <Row k="Website" v={open.user.website} />
-                <Row k="Location" v={open.user.location} />
-                {open.status !== "PENDING_REVIEW" && (
-                  <>
-                    <div className="font-bold text-navy text-xs uppercase tracking-wide pt-3">Decision</div>
-                    <Row k="Status" v={open.status} />
-                    <Row k="Reviewed" v={fmt(open.reviewedAt)} />
-                    {open.rejectionReason && <Row k="Reason" v={open.rejectionReason} />}
-                  </>
-                )}
-                <div className="pt-3 text-xs text-gray-500 leading-relaxed">
-                  <strong>Check:</strong> name on the document matches the typed legal name exactly; ID number ends with the digits shown; document is legible, not expired, and all corners visible{open.kind === "ORGANIZATION" ? "; registration number matches the certificate" : ""}.
+        {open && (
+          <div className="xl:col-span-3">
+            <div className="rounded-xl bg-white ring-1 ring-slate-200/80">
+              <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+                <div>
+                  <h2 className="text-base font-extrabold text-navy">{open.kind === "ORGANIZATION" ? "Organization verification" : "Identity verification"} · {open.user.name}</h2>
+                  <p className="mt-0.5 text-xs text-slate-500">{open.user.email} · account created {fmtDateTime(open.user.createdAt)} · email {open.user.emailVerifiedAt ? "confirmed" : <span className="font-bold text-red-700">NOT confirmed</span>}</p>
+                </div>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="sm" icon="user" onClick={() => openUser(open.user.id)}>Account</Button>
+                  <Button variant="ghost" size="sm" icon="x" onClick={() => setQuery({ ...query, request: undefined })} aria-label="Close" />
                 </div>
               </div>
-
-              <div className="md:col-span-2 space-y-4">
-                <div className="font-bold text-navy text-xs uppercase tracking-wide">Documents ({open.documents.length})</div>
-                {open.documents.length === 0 && <p className="text-sm text-gray-500">No documents (purged or missing).</p>}
-                {open.documents.map(d => (
-                  <div key={d.id} className="border rounded-lg overflow-hidden">
-                    <div className="flex justify-between items-center px-3 py-2 bg-gray-50 text-xs">
-                      <span className="font-bold text-navy">{DOC_LABEL[d.type] ?? d.type}</span>
-                      <span className="text-gray-500">{d.sizeBytes < 1024 ? "<1" : Math.round(d.sizeBytes / 1024)} KB · <a href={`/api/verification/documents/${d.id}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">open in new tab</a></span>
-                    </div>
-                    {d.mimeType === "application/pdf"
-                      ? <iframe src={`/api/verification/documents/${d.id}`} title={DOC_LABEL[d.type]} className="w-full h-[420px] bg-white" />
-                      // eslint-disable-next-line @next/next/no-img-element
-                      : <img src={`/api/verification/documents/${d.id}`} alt={DOC_LABEL[d.type]} className="w-full max-h-[420px] object-contain bg-gray-100" />}
+              <div className="grid grid-cols-1 gap-5 px-5 py-4 lg:grid-cols-3">
+                <div className="space-y-4 text-sm lg:col-span-1">
+                  <div>
+                    <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">What they typed</div>
+                    <KeyValue items={[
+                      [open.kind === "ORGANIZATION" ? "Organization legal name" : "Legal name", <strong key="ln" className="text-navy">{open.formData?.legalName}</strong>],
+                      ...(open.kind === "ORGANIZATION" ? [["Registration no.", open.formData?.registrationNumber], ["Authorized person", open.formData?.authorizedPersonName]] as Array<[string, React.ReactNode]> : []),
+                      ["ID type", open.formData?.idType], ["ID ends with", open.formData?.idLast4 ? `···${open.formData.idLast4}` : null],
+                    ]} />
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {open.status === "PENDING_REVIEW" && (
-              <div className="p-5 border-t bg-gray-50 space-y-3">
-                <label className="block text-sm font-semibold text-gray-700" htmlFor="v-reason">Reason (required to reject; shown to the applicant)</label>
-                <textarea id="v-reason" value={reason} onChange={e => setReason(e.target.value)} rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-navy outline-none" placeholder="e.g. The name on the ID (Ayesha Khan) does not match the legal name typed (Aisha Khan)." />
-                {error && <p className="text-sm text-red-600 font-medium">{error}</p>}
-                <div className="flex justify-end gap-2">
-                  <button disabled={busy} onClick={() => decide("REJECT")} className="px-5 py-2 rounded-lg border border-red-300 text-red-700 font-bold text-sm hover:bg-red-50 disabled:opacity-50">Reject</button>
-                  <button disabled={busy} onClick={() => decide("APPROVE")} className="px-6 py-2 rounded-lg bg-green-700 text-white font-bold text-sm hover:bg-green-800 disabled:opacity-50">{busy ? "Saving…" : "Approve ✓"}</button>
+                  <div>
+                    <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Profile</div>
+                    <KeyValue items={[["Display name", open.user.name], ["Website", open.user.website], ["Location", open.user.location]]} />
+                  </div>
+                  {open.status !== "PENDING_REVIEW" && (
+                    <div>
+                      <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">Decision</div>
+                      <KeyValue items={[["Status", <StatusBadge key="s" status={open.status} />], ["Reviewed", fmtDateTime(open.reviewedAt)], ["Reason", open.rejectionReason]]} />
+                    </div>
+                  )}
+                  <div className="rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-900 ring-1 ring-amber-200">
+                    <strong>Check:</strong> the name on the document matches the typed legal name exactly; the ID number ends with the digits shown; the document is legible, not expired, all corners visible{open.kind === "ORGANIZATION" ? "; the registration number matches the certificate" : ""}.
+                  </div>
+                </div>
+                <div className="space-y-3 lg:col-span-2">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Documents <Badge>{open.documents.length}</Badge></div>
+                  {open.documents.length === 0 && <p className="text-sm text-slate-500">No documents (purged or missing).</p>}
+                  {open.documents.map(d => (
+                    <div key={d.id} className="overflow-hidden rounded-lg ring-1 ring-slate-200">
+                      <div className="flex items-center justify-between bg-slate-50 px-3 py-2 text-xs">
+                        <span className="font-bold text-navy">{DOC_LABEL[d.type] ?? d.type}</span>
+                        <span className="text-slate-500">{d.sizeBytes < 1024 ? "<1" : Math.round(d.sizeBytes / 1024)} KB · <a href={`/api/verification/documents/${d.id}`} target="_blank" rel="noopener noreferrer" className="font-semibold text-sky-700 hover:underline">open in new tab ↗</a></span>
+                      </div>
+                      {d.mimeType === "application/pdf"
+                        ? <iframe src={`/api/verification/documents/${d.id}`} title={DOC_LABEL[d.type]} className="h-[420px] w-full bg-white" />
+                        // eslint-disable-next-line @next/next/no-img-element
+                        : <img src={`/api/verification/documents/${d.id}`} alt={DOC_LABEL[d.type]} className="max-h-[420px] w-full bg-slate-100 object-contain" />}
+                    </div>
+                  ))}
                 </div>
               </div>
-            )}
+              {open.status === "PENDING_REVIEW" && (
+                <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3">
+                  <Button variant="secondary" className="text-red-700 ring-red-300 hover:bg-red-50" loading={busy} onClick={() => decide("REJECT")}>Reject…</Button>
+                  <Button variant="primary" icon="check" loading={busy} onClick={() => decide("APPROVE")}>Approve</Button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
-}
-
-function Row({ k, v }: { k: string; v?: string | null }) {
-  return <div className="flex justify-between gap-3"><span className="text-gray-500">{k}</span><span className="font-medium text-navy text-right break-words">{v || "—"}</span></div>;
 }

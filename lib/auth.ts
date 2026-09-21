@@ -3,12 +3,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import {
-  SESSION_TTL_SECONDS,
-  signToken,
-  verifyToken,
-  type SessionPayload,
-} from "@/lib/auth-token";
+import { SESSION_IDLE_SECONDS, signToken, verifyToken, type SessionPayload, SESSION_MAX_SECONDS, SESSION_REFRESH_AFTER_SECONDS } from "@/lib/auth-token";
 import { COOKIE_NAME } from "@/lib/auth-constants";
 
 export { COOKIE_NAME } from "@/lib/auth-constants";
@@ -33,7 +28,7 @@ export async function createToken(payload: SessionPayload): Promise<string> {
     data: {
       tokenHash: hashToken(token),
       userId: payload.userId,
-      expiresAt: new Date(Date.now() + SESSION_TTL_SECONDS * 1000),
+      expiresAt: new Date(Date.now() + SESSION_IDLE_SECONDS * 1000),
     },
   });
   return token;
@@ -52,7 +47,7 @@ export async function setAuthCookie(token: string) {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: SESSION_TTL_SECONDS,
+    maxAge: SESSION_MAX_SECONDS,
     path: "/",
   });
 }
@@ -83,11 +78,19 @@ export async function getSession(): Promise<SessionPayload | null> {
   const payload = await verifyToken(token);
   if (!payload) return null;
 
-  const storedSession = await prisma.session.findUnique({
-    where: { tokenHash: hashToken(token) },
-  });
-  if (!storedSession || storedSession.revokedAt || storedSession.expiresAt <= new Date()) {
+  const tokenHash = hashToken(token);
+  const storedSession = await prisma.session.findUnique({ where: { tokenHash } });
+  const now = Date.now();
+  if (!storedSession || storedSession.revokedAt || storedSession.expiresAt.getTime() <= now) {
     return null;
+  }
+  const hardEnd = storedSession.createdAt.getTime() + SESSION_MAX_SECONDS * 1000;
+  if (hardEnd <= now) return null;
+
+  // Sliding expiry: extend on activity, throttled so a busy dashboard doesn't write on every request.
+  const target = Math.min(now + SESSION_IDLE_SECONDS * 1000, hardEnd);
+  if (target - storedSession.expiresAt.getTime() > SESSION_REFRESH_AFTER_SECONDS * 1000) {
+    prisma.session.update({ where: { tokenHash }, data: { expiresAt: new Date(target) } }).catch(() => { /* best effort */ });
   }
 
   if (payload.role === "ADMIN" && payload.userId === "super-admin") return payload;

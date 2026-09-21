@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Btn, Card, EmptyState, Modal, Notice, SectionHeader, SkillChips, StatusBadge, formatDate, textareaStyle } from "@/components/dashboard/ui";
 import { api } from "@/components/dashboard/useDashboardData";
 import type { CertificateDto } from "@/lib/types";
+import { linkedInAddUrl } from "@/lib/certificate-share";
 
 /** Certificate list shared by client (issued) and talent (earned) dashboards. */
 export function CertificateGrid({ certificates, mode, onChanged }: { certificates: CertificateDto[]; mode: "issued" | "earned"; onChanged?: () => void }) {
@@ -49,6 +50,9 @@ export function CertificateGrid({ certificates, mode, onChanged }: { certificate
                 <Link href={`/certificates/${cert.certId}`} style={{ fontSize: 11, fontWeight: 700, color: "var(--navy)", textDecoration: "none", padding: "4px 10px", border: "1px solid var(--navy)", borderRadius: 6 }}>View</Link>
                 {cert.status !== "REVOKED" && (
                   <a href={`/api/certificates/${cert.id}/pdf`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: "var(--navy)", textDecoration: "none", padding: "4px 10px", borderRadius: 6 }}>PDF</a>
+                )}
+                {mode === "earned" && cert.status === "VERIFIED" && (
+                  <a href={linkedInAddUrl(typeof window === "undefined" ? "" : window.location.origin, { certId: cert.certId, title: cert.title, issuedAt: new Date(cert.issuedAt) })} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: "#0A66C2", textDecoration: "none", padding: "4px 10px", borderRadius: 6 }}>Add to LinkedIn</a>
                 )}
                 {mode === "issued" && cert.status === "VERIFIED" && (
                   <>

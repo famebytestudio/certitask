@@ -82,6 +82,7 @@ async function main() {
     emailVerifiedAt: new Date(),
     verificationStatus: "VERIFIED",
     verifiedAt: new Date(),
+    suspendedAt: null,
     freePostsUsed: 2, // both free posts already used; Acme is on a paid plan (seeded below)
     bio: "A Lahore design and development studio. We post small, real client tasks that our team doesn't have bandwidth for.",
     website: "https://acmestudio.pk",
@@ -99,6 +100,7 @@ async function main() {
     clientType: "INDIVIDUAL",
     emailVerifiedAt: new Date(),
     verificationStatus: "UNVERIFIED",
+    suspendedAt: null,
     freePostsUsed: 0,
     bio: "Independent consultant. I post research and content tasks for my clients' marketing.",
     location: "Karachi, Pakistan",
@@ -113,7 +115,7 @@ async function main() {
     { email: "hamza.iqbal@example.com", name: "Hamza Iqbal", universityName: "COMSATS", degreeProgram: "BS Data Science", currentSemester: "4", gpa: 3.1, skills: ["Python", "Pandas", "SQL", "Data cleaning"], bio: "Data student looking for real datasets to work on.", location: "Islamabad, Pakistan" },
   ]) {
     // Reset verification state so re-seeding always returns to the demo baseline.
-    const base = { verificationStatus: "UNVERIFIED", verifiedAt: null, legalName: null, idType: null, idNumberHash: null, idLast4: null };
+    const base = { verificationStatus: "UNVERIFIED", verifiedAt: null, legalName: null, idType: null, idNumberHash: null, idLast4: null, suspendedAt: null };
     const u = await upsertUser({ ...base, ...t, role: "TALENT", emailVerifiedAt: new Date() });
     await prisma.verificationRequest.deleteMany({ where: { userId: u.id } });
     await prisma.document.deleteMany({ where: { userId: u.id } });
@@ -186,7 +188,7 @@ async function main() {
   ];
 
   // Drop accounts and projects left behind by automated smoke tests.
-  await prisma.user.deleteMany({ where: { OR: [{ email: { startsWith: "smoke" } }, { email: { startsWith: "newbie+" } }, { email: { startsWith: "uitest." } }] } });
+  await prisma.user.deleteMany({ where: { OR: [{ email: { startsWith: "smoke" } }, { email: { startsWith: "newbie+" } }, { email: { startsWith: "uitest." } }, { email: { contains: "+smoketest" } }] } });
   const smoke = await prisma.project.findMany({ where: { OR: [{ title: { startsWith: "Smoke" } }, { title: { startsWith: "UI test" } }] }, select: { id: true } });
   for (const sp of smoke) { await prisma.certificate.deleteMany({ where: { projectId: sp.id } }); await prisma.project.delete({ where: { id: sp.id } }); }
 

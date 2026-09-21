@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { generateCertificatePdf } from "@/lib/pdf";
+import { generateCertificatePdf, loadPrintableCertificate } from "@/lib/pdf";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -11,7 +10,7 @@ export async function GET(_req: Request, { params }: Params) {
   if (auth instanceof NextResponse) return auth;
 
   const { id } = await params;
-  const certificate = await prisma.certificate.findFirst({ where: { OR: [{ id }, { certId: id }] } });
+  const certificate = await loadPrintableCertificate(id.toUpperCase().startsWith("CERT-") ? { certId: id.toUpperCase() } : { id });
   if (!certificate) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const allowed =

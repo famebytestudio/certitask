@@ -21,6 +21,9 @@ export async function GET(req: Request) {
   }
   const now = new Date();
 
+  // 0. sessions: drop rows that can never be used again (expired or revoked for a week)
+  const prunedSessions = await prisma.session.deleteMany({ where: { OR: [{ expiresAt: { lt: new Date(now.getTime() - 7 * 86_400_000) } }, { revokedAt: { lt: new Date(now.getTime() - 7 * 86_400_000) } }] } });
+
   // 1. invitations
   const expiredMembers = await prisma.teamMember.updateMany({ where: { status: "INVITED", expiresAt: { lt: now } }, data: { status: "EXPIRED" } });
   const expiredInvites = await prisma.teamInvite.deleteMany({ where: { acceptedAt: null, expiresAt: { lt: now } } });
@@ -60,5 +63,5 @@ export async function GET(req: Request) {
   // 4. billing periods
   const billing = await runBillingMaintenance();
 
-  return NextResponse.json({ expiredInvitations: expiredMembers.count + expiredInvites.count, closedProjects: toClose.length, remindedTeams: reminded, billing });
+  return NextResponse.json({ prunedSessions: prunedSessions.count, expiredInvitations: expiredMembers.count + expiredInvites.count, closedProjects: toClose.length, remindedTeams: reminded, billing });
 }

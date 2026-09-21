@@ -4,7 +4,16 @@ const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret) throw new Error("JWT_SECRET is not configured");
 const JWT_SECRET = new TextEncoder().encode(jwtSecret);
 
-export const SESSION_TTL_SECONDS = 30 * 60;
+/**
+ * Sessions slide: each request past the refresh threshold pushes the DB
+ * expiry out by SESSION_IDLE_SECONDS. Nothing survives SESSION_MAX_SECONDS
+ * after login (the JWT itself expires then), so a stolen cookie has a hard end.
+ */
+export const SESSION_IDLE_SECONDS = 7 * 24 * 60 * 60;      // 7 days without activity
+export const SESSION_MAX_SECONDS = 30 * 24 * 60 * 60;      // 30 days absolute
+export const SESSION_REFRESH_AFTER_SECONDS = 60 * 60;      // extend at most hourly (limits DB writes)
+/** @deprecated use SESSION_IDLE_SECONDS */
+export const SESSION_TTL_SECONDS = SESSION_IDLE_SECONDS;
 
 export interface SessionPayload {
   userId: string;
@@ -17,7 +26,7 @@ export async function signToken(payload: SessionPayload): Promise<string> {
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
+    .setExpirationTime(`${SESSION_MAX_SECONDS}s`)
     .sign(JWT_SECRET);
 }
 

@@ -14,7 +14,7 @@ export function useDashboardData() {
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/dashboard", { cache: "no-store" });
-      if (res.status === 401) { router.replace("/auth/login"); return; }
+      if (res.status === 401) { await fetch("/api/auth/logout", { method: "POST" }).catch(() => {}); router.replace("/auth/login"); return; } // clear a stale cookie so the proxy does not bounce us back
       const json = await res.json();
       if (!res.ok) { setError(json.error ?? "Failed to load dashboard"); return; }
       setData(json as DashboardResponse);

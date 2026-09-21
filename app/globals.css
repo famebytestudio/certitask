@@ -1,4 +1,8 @@
 @import "tailwindcss";
+/* Scan only this project (the repo sits inside a larger folder with its own git repo). */
+@source "../app";
+@source "../components";
+@source "../lib";
 
 /* ─── Brand Tokens ───────────────────────────────────────────── */
 :root {
@@ -1301,17 +1305,7 @@ img, svg, video, canvas, iframe {
   }
 }
 
-/* ─── Misc Utilities ─────────────────────────────────────────── */
-.text-center { text-align: center; }
-.mt-4  { margin-top: 16px; }
-.mt-6  { margin-top: 24px; }
-.mt-8  { margin-top: 32px; }
-.mb-4  { margin-bottom: 16px; }
-.flex  { display: flex; }
-.items-center { align-items: center; }
-.justify-between { justify-content: space-between; }
-.gap-2 { gap: 8px; }
-.w-full { width: 100%; }
+/* Hand-written copies of Tailwind utilities (.flex, .w-full, .mt-4…) were removed: being unlayered they overrode every responsive variant such as md:hidden and sm:w-72. */
 .forgot-link {
   font-size: 13px;
   color: var(--ink-muted);
@@ -1319,3 +1313,8 @@ img, svg, video, canvas, iframe {
   transition: var(--transition);
 }
 .forgot-link:hover { color: var(--gold); }
+
+@media print {
+  .no-print, nav, footer { display: none !important; }
+  body { background: #fff !important; }
+}

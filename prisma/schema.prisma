@@ -542,8 +542,11 @@ model ContactMessage {
   type      String   @default("contact") // contact, client_query
   priority  Boolean  @default(false) // sent by a Pro client
   isRead    Boolean  @default(false)
+  readAt     DateTime?
+  archivedAt DateTime?
   createdAt DateTime @default(now())
 
+  @@index([archivedAt, isRead, createdAt])
   @@map("contact_messages")
 }
 

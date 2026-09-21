@@ -134,3 +134,44 @@ ${billingUrl}`,
     html: layout("Payment received", `<p>Hi ${name},</p><p>Thanks for your payment of <strong>${amount}</strong> for the <strong>${planName}</strong> plan (30 days).</p><p>Receipt number: <strong>${receiptNumber}</strong></p>${button(billingUrl, "View billing")}`),
   });
 }
+
+export function sendCertificatesIssuedSummaryEmail(to: string, name: string, projectTitle: string, certs: { certId: string; recipientName: string; url: string }[]) {
+  const list = certs.map(c => `<li><a href="${c.url}">${c.recipientName}</a> — <code>${c.certId}</code></li>`).join("");
+  const n = certs.length;
+  return sendEmail({
+    to,
+    subject: `Certificates issued — ${projectTitle}`,
+    text: `Hi ${name}, you approved "${projectTitle}" and ${n} certificate${n === 1 ? " was" : "s were"} issued:\n${certs.map(c => `- ${c.recipientName}: ${c.url}`).join("\n")}\n\nYou can revoke or dispute any of them from Issued Certificates in your dashboard.`,
+    html: layout("Certificates issued", `<p>Hi ${name},</p><p>You approved <strong>${projectTitle}</strong> and ${n} certificate${n === 1 ? " was" : "s were"} issued under your name:</p><ul>${list}</ul><p style="font-size:13px;color:#4B5563">Each one can be revoked or disputed from <em>Issued Certificates</em> in your dashboard; the public verify page updates immediately.</p>`),
+  });
+}
+
+export function sendCertificateStatusEmail(to: string, name: string, projectTitle: string, certId: string, status: "VERIFIED" | "REVOKED" | "DISPUTED", reason: string | null, url: string) {
+  const headline = status === "REVOKED" ? "Your certificate was revoked" : status === "DISPUTED" ? "Your certificate is under dispute" : "Your certificate was reinstated";
+  const body = status === "REVOKED"
+    ? "The issuer has withdrawn this certificate. It no longer verifies and should not be presented as a credential."
+    : status === "DISPUTED"
+      ? "The issuer has flagged this certificate for review. It shows as disputed on the public verify page until this is resolved."
+      : "The issuer has restored this certificate. It verifies normally again.";
+  return sendEmail({
+    to,
+    subject: `${headline} — ${projectTitle}`,
+    text: `Hi ${name}, ${body}\n\nCertificate: ${certId}\n${reason ? `Reason given: ${reason}\n` : ""}${url}`,
+    html: layout(headline, `<p>Hi ${name},</p><p>${body}</p><p><strong>${projectTitle}</strong> · <code>${certId}</code></p>${reason ? `<p style="padding:12px;background:#FFF7ED;border-radius:8px">Reason given: <em>${reason}</em></p>` : ""}${button(url, "Open certificate")}`),
+  });
+}
+
+export function sendAccountStatusEmail(to: string, name: string, kind: "SUSPENDED" | "REINSTATED" | "VERIFICATION_RESET", reason: string | null, dashboardUrl: string) {
+  const headline = kind === "SUSPENDED" ? "Your CertiTask account has been suspended" : kind === "REINSTATED" ? "Your CertiTask account is active again" : "Please resubmit your verification";
+  const body = kind === "SUSPENDED"
+    ? "An administrator has suspended your account. You are signed out and cannot sign in until it is reinstated. If you believe this is a mistake, reply to this email."
+    : kind === "REINSTATED"
+      ? "Your account has been reinstated. You can sign in and continue where you left off."
+      : "An administrator has reset your identity verification. Please submit your documents again from the Verification tab.";
+  return sendEmail({
+    to,
+    subject: headline,
+    text: `Hi ${name},\n\n${body}\n${reason ? `\nReason: ${reason}\n` : ""}\n${dashboardUrl}`,
+    html: layout(headline, `<p>Hi ${name},</p><p>${body}</p>${reason ? `<p style="padding:12px;background:#FFF7ED;border-radius:8px"><strong>Reason:</strong> ${reason}</p>` : ""}${kind === "SUSPENDED" ? "" : button(dashboardUrl, "Open dashboard")}`),
+  });
+}

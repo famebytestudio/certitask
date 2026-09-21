@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/Button";
 
 type CertificateStatus = "VERIFIED" | "REVOKED" | "DISPUTED";
@@ -16,6 +16,7 @@ interface Certificate {
   status: CertificateStatus;
   statusReason: string | null;
   signatureValid: boolean;
+  fingerprint: string | null;
 }
 
 interface VerifyResponse {
@@ -30,6 +31,7 @@ interface VerifyResponse {
     status: string;
     statusReason: string | null;
     signatureValid: boolean;
+    fingerprint?: string;
   };
 }
 
@@ -66,15 +68,12 @@ export default function VerifyPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!certId.trim()) return;
-
+  const lookup = useCallback(async (raw: string) => {
+    const query = raw.trim().toUpperCase();
+    if (!query) return;
     setLoading(true);
     setSearched(false);
     setError(null);
-
-    const query = certId.trim().toUpperCase();
 
     try {
       const res = await fetch(`/api/verify/${encodeURIComponent(query)}`);
@@ -92,6 +91,7 @@ export default function VerifyPage() {
           status: toStatus(c.status),
           statusReason: c.statusReason ?? null,
           signatureValid: c.signatureValid !== false,
+          fingerprint: c.fingerprint ?? null,
         });
       } else {
         setResult(null);
@@ -105,7 +105,15 @@ export default function VerifyPage() {
       setSearched(true);
       setLoading(false);
     }
-  };
+  }, []);
+
+  const handleSearch = (e: React.FormEvent) => { e.preventDefault(); void lookup(certId); };
+
+  // Arriving from a QR code or a certificate link: verify immediately.
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get("id");
+    if (fromUrl) { const t = setTimeout(() => { void lookup(fromUrl); }, 0); return () => clearTimeout(t); }
+  }, [lookup]);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -221,12 +229,21 @@ export default function VerifyPage() {
                     )}
                   </div>
 
-                  {/* Certificate ID */}
+                  {/* Certificate ID + signature fingerprint */}
                   <div className="pt-6 border-t border-navy/5 bg-paper/50 p-4 rounded-lg">
-                    <p className="text-[10px] font-bold text-navy/60 uppercase tracking-wide mb-1">Certificate ID</p>
-                    <p className="text-xs font-mono text-ink/75 break-all leading-normal bg-white p-2.5 rounded border border-navy/5">
-                      {result.certId}
-                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] font-bold text-navy/60 uppercase tracking-wide mb-1">Certificate ID</p>
+                        <p className="text-xs font-mono text-ink/75 break-all leading-normal bg-white p-2.5 rounded border border-navy/5">{result.certId}</p>
+                      </div>
+                      {result.fingerprint && (
+                        <div>
+                          <p className="text-[10px] font-bold text-navy/60 uppercase tracking-wide mb-1">Digital signature fingerprint</p>
+                          <p className="text-xs font-mono text-ink/75 break-all leading-normal bg-white p-2.5 rounded border border-navy/5" title="HMAC-SHA256 signature computed by CertiTask over the certificate's immutable fields">{result.fingerprint}</p>
+                          <p className="text-[11px] text-ink/60 mt-1">Must match the fingerprint printed on the PDF.</p>
+                        </div>
+                      )}
+                    </div>
                     <a href={`/certificates/${encodeURIComponent(result.certId)}`} className="inline-block mt-3 text-xs font-bold text-navy underline underline-offset-2">
                       Open the certificate page
                     </a>

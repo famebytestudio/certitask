@@ -5,6 +5,8 @@ import { isString } from "@/lib/validation";
 import { certificateInclude } from "@/lib/queries";
 import { audit } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
+import { sendCertificateStatusEmail } from "@/lib/email";
+import { certificatePageUrl } from "@/lib/certificate-links";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -47,6 +49,7 @@ export async function PATCH(req: Request, { params }: Params) {
     });
     await audit(auth, `certificate.${status.toLowerCase()}`, "certificate", certificate.id, { certId: certificate.certId, from: certificate.status, reason: reason ?? null });
     await notify(certificate.talentId, "certificate.status", `Certificate ${status.toLowerCase()}`, `${certificate.title} (${certificate.certId}) is now ${status.toLowerCase()}.${reason ? ` Reason: ${reason}` : ""}`, "/talent/dashboard?tab=certificates");
+    void sendCertificateStatusEmail(certificate.recipientEmail, certificate.recipientName, certificate.title, certificate.certId, status, reason ?? null, certificatePageUrl(certificate.certId)).catch(e => console.error("certificate status email failed:", e));
 
     return NextResponse.json({ success: true, certificate: updated });
   } catch (error) {

@@ -1,9 +1,25 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { PrintButton } from "@/components/PrintButton";
+import { ShareBar } from "@/components/certificates/ShareBar";
 import { CLIENT_TYPE_LABEL } from "@/lib/enums";
+import { certificatePageUrl, certificateQrDataUrl, certificateVerifyUrl, linkedInAddUrl, signatureFingerprint } from "@/lib/certificate-links";
+
+/** Link previews on LinkedIn / WhatsApp show the recipient and project. */
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const cert = await prisma.certificate.findFirst({ where: { OR: [{ certId: id.toUpperCase() }, { id }] }, select: { certId: true, recipientName: true, title: true, issuerName: true, status: true } }).catch(() => null);
+  if (!cert) return { title: "Certificate not found — CertiTask" };
+  const status = cert.status === "VERIFIED" ? "Verified" : cert.status === "REVOKED" ? "Revoked" : "Disputed";
+  return {
+    title: `${cert.recipientName} — ${cert.title} | CertiTask certificate`,
+    description: `${status} certificate of completion for "${cert.title}", issued to ${cert.recipientName} by ${cert.issuerName}. ID ${cert.certId}.`,
+    openGraph: { title: `${cert.recipientName} completed ${cert.title}`, description: `Verified project certificate issued by ${cert.issuerName} · ID ${cert.certId}`, url: certificatePageUrl(cert.certId), type: "article", images: ["/lockup-light-bg.png"] },
+    twitter: { card: "summary", title: `${cert.recipientName} completed ${cert.title}`, description: `Verified project certificate issued by ${cert.issuerName}` },
+  };
+}
 
 function fmt(d: Date) {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
@@ -15,7 +31,7 @@ export default async function CertificatePage({ params }: { params: Promise<{ id
   const [cert, session] = await Promise.all([
     prisma.certificate.findFirst({
       where: { OR: [{ certId: id.toUpperCase() }, { id }] },
-      include: { client: { select: { id: true, name: true } }, talent: { select: { id: true } }, project: { select: { id: true, category: true } } },
+      include: { client: { select: { id: true, name: true } }, talent: { select: { id: true } }, project: { select: { id: true, category: true } }, team: { select: { name: true, members: { select: { userId: true, role: true } } } } },
     }).catch((e) => { console.error("Error fetching certificate:", e); return null; }),
     getSession(),
   ]);
@@ -36,7 +52,10 @@ export default async function CertificatePage({ params }: { params: Promise<{ id
   const isDisputed = cert.status === "DISPUTED";
   const isValid = !isRevoked && !isDisputed;
   const borderColor = isRevoked ? "#B91C1C" : isDisputed ? "#B45309" : "#D4A017";
-  const canDownload = isValid && session && (session.role === "ADMIN" || session.userId === cert.talentId || session.userId === cert.clientId);
+  const canDownload = Boolean(isValid && session && (session.role === "ADMIN" || session.userId === cert.talentId || session.userId === cert.clientId));
+  const teamRole = cert.team?.members.find(m => m.userId === cert.talentId)?.role ?? null;
+  const qr = await certificateQrDataUrl(cert.certId);
+  const verifyUrl = certificateVerifyUrl(cert.certId);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f6f9fc', padding: "40px 20px", fontFamily: "sans-serif" }}>
@@ -78,6 +97,7 @@ export default async function CertificatePage({ params }: { params: Promise<{ id
             for <Link href={`/clients/${cert.client.id}`} style={{ fontSize: 18, fontWeight: 700, color: '#07203b', textDecoration: 'none' }}>{cert.issuerName}</Link>
             <span style={{ display: 'block', fontSize: 12, color: '#6b7280', marginTop: 2 }}>Verified {CLIENT_TYPE_LABEL[cert.issuerType]}</span>
           </p>
+          {cert.team && cert.team.name.trim().toLowerCase() !== cert.recipientName.trim().toLowerCase() && <p style={{ color: '#6b7280', fontSize: 13, margin: '10px 0 0', fontStyle: 'italic' }}>{teamRole === "LEAD" ? "as team lead of" : "as a member of"} &ldquo;{cert.team.name}&rdquo;</p>}
 
           {cert.skills.length > 0 && (
             <div style={{ marginTop: 22 }}>
@@ -88,31 +108,29 @@ export default async function CertificatePage({ params }: { params: Promise<{ id
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 44, padding: '0 20px', borderTop: '1px solid #F3F4F6', paddingTop: 28, gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', alignItems: 'end', marginTop: 44, padding: '28px 20px 0', borderTop: '1px solid #F3F4F6', gap: 20 }}>
             <div style={{ textAlign: 'left' }}>
               <div style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600 }}>Issued</div>
               <div style={{ fontWeight: 700, color: '#07203b', fontSize: 15, marginTop: 4 }}>{fmt(cert.issuedAt)}</div>
-              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 8 }}>ID: <span style={{ fontFamily: 'monospace', color: '#111827', fontWeight: 600 }}>{cert.certId}</span></div>
-              <Link href={`/verify?id=${encodeURIComponent(cert.certId)}`} style={{ fontSize: 11, color: '#07203b', fontWeight: 700, display: 'inline-block', marginTop: 6 }}>Verify this certificate →</Link>
+              <div style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, marginTop: 12 }}>Certificate ID</div>
+              <div style={{ fontFamily: 'monospace', color: '#111827', fontWeight: 600, fontSize: 13, marginTop: 4 }}>{cert.certId}</div>
+              <Link href={`/verify/${encodeURIComponent(cert.certId)}`} style={{ fontSize: 11, color: '#07203b', fontWeight: 700, display: 'inline-block', marginTop: 8 }}>Verify this certificate →</Link>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- data URL generated server-side */}
+              <img src={qr} alt={`QR code linking to ${verifyUrl}`} width={112} height={112} style={{ width: 112, height: 112, display: 'inline-block', border: '1px solid #E5E7EB', borderRadius: 8, padding: 4, background: '#fff' }} />
+              <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 6 }}>Scan to verify</div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ height: 58, width: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                <Image src="/signature.png" alt="Authorized signatory signature" width={180} height={97} style={{ width: 180, height: 97, objectFit: 'contain' }} />
-              </div>
-              <div style={{ marginTop: 6, fontSize: 12, fontWeight: 700, color: '#07203b' }}>Authorized Signatory</div>
-              <div style={{ fontSize: 10, color: '#9CA3AF' }}>CertiTask Verification Authority</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600 }}>Issued by</div>
+              <div style={{ fontWeight: 700, color: '#07203b', fontSize: 15, marginTop: 4 }}>{cert.issuerName}</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, marginTop: 12 }}>Digitally signed by CertiTask</div>
+              <div style={{ fontFamily: 'monospace', color: '#111827', fontWeight: 600, fontSize: 13, marginTop: 4 }} title="HMAC-SHA256 signature over the certificate's immutable fields">{signatureFingerprint(cert.signature)}</div>
+              <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>Fingerprint · matches the verify page when genuine</div>
             </div>
           </div>
 
-          <div style={{ marginTop: 32, display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <PrintButton />
-            {canDownload && (
-              <a href={`/api/certificates/${cert.id}/pdf`} target="_blank" rel="noopener noreferrer"
-                style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px", background: "#07203b", color: "#fff", borderRadius: 8, fontSize: 14, fontWeight: 700, textDecoration: "none", boxShadow: "0 2px 8px rgba(7,32,59,0.15)" }}>
-                📥 Download PDF
-              </a>
-            )}
-          </div>
+          <ShareBar pageUrl={certificatePageUrl(cert.certId)} linkedInUrl={linkedInAddUrl(cert)} pdfHref={canDownload ? `/api/certificates/${cert.id}/pdf` : null} valid={isValid} />
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isRateLimited } from "@/lib/rate-limit";
 import { verifyCertificateSignature } from "@/lib/certificates";
+import { signatureFingerprint } from "@/lib/certificate-links";
 
 type Params = { params: Promise<{ certId: string }> };
 
@@ -51,6 +52,7 @@ export async function GET(req: Request, { params }: Params) {
         status: certificate.status,
         statusReason: certificate.status === "VERIFIED" ? null : certificate.statusReason,
         signatureValid,
+        fingerprint: signatureFingerprint(certificate.signature),
         client: certificate.client,
         project: certificate.project,
       },

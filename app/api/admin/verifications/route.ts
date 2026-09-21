@@ -8,8 +8,15 @@ export async function GET(req: Request) {
   const authorization = await requireAdmin();
   if (authorization instanceof NextResponse) return authorization;
 
-  const status = new URL(req.url).searchParams.get("status") ?? "PENDING_REVIEW";
-  const where = status === "ALL" ? {} : isOneOf(VERIFICATION_STATUSES, status) ? { status } : { status: "PENDING_REVIEW" as const };
+  const url = new URL(req.url);
+  const status = url.searchParams.get("status") ?? "PENDING_REVIEW";
+  const kind = url.searchParams.get("kind");
+  const q = (url.searchParams.get("q") ?? "").trim().slice(0, 100);
+  const where = {
+    ...(status === "ALL" ? {} : isOneOf(VERIFICATION_STATUSES, status) ? { status } : { status: "PENDING_REVIEW" as const }),
+    ...(kind === "IDENTITY" || kind === "ORGANIZATION" ? { kind: kind as "IDENTITY" | "ORGANIZATION" } : {}),
+    ...(q ? { user: { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { email: { contains: q, mode: "insensitive" as const } }] } } : {}),
+  };
 
   try {
     const requests = await prisma.verificationRequest.findMany({

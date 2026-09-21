@@ -1,8 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { generateCertId, signCertificate } from "@/lib/certificates";
-import { generateCertificatePdf } from "@/lib/pdf";
-import { sendCertificateEmail } from "@/lib/email";
+import { generateCertificatePdf, loadPrintableCertificate } from "@/lib/pdf";
+import { certificatePageUrl, certificateVerifyUrl, linkedInAddUrl } from "@/lib/certificate-links";
+import { sendCertificateEmail, sendCertificatesIssuedSummaryEmail } from "@/lib/email";
 import { audit } from "@/lib/audit";
 import { notify } from "@/lib/notifications";
 import type { SessionPayload } from "@/lib/auth-token";
@@ -107,21 +108,52 @@ export async function releaseHeldCertificates(tx: Tx, actor: Actor, talentId: st
   return issued;
 }
 
-/** Best-effort PDF + email delivery after the transaction has committed. Never throws. */
+/**
+ * Best-effort PDF + email delivery after the transaction has committed. Never throws.
+ * The talent gets the PDF; the issuing client gets one summary email with links
+ * (no attachments — they can download any certificate from their dashboard).
+ */
 export async function deliverCertificates(certificateIds: string[]): Promise<void> {
+  const byClient = new Map<string, { clientId: string; title: string; certs: { certId: string; recipientName: string }[] }>();
   for (const id of certificateIds) {
     try {
-      const cert = await prisma.certificate.findUnique({ where: { id } });
+      const cert = await loadPrintableCertificate({ id });
       if (!cert) continue;
       const pdf = await generateCertificatePdf(cert);
       await sendCertificateEmail({
         to: cert.recipientEmail,
         subject: `Your CertiTask certificate — ${cert.title}`,
-        text: `Congratulations ${cert.recipientName}! Your certificate for "${cert.title}" issued by ${cert.issuerName} is attached. Verify it any time at ${process.env.APP_URL ?? ""}/verify using ID ${cert.certId}.`,
+        text: `Congratulations ${cert.recipientName}! Your certificate for "${cert.title}" issued by ${cert.issuerName} is attached.\n\nShare it: ${certificatePageUrl(cert.certId)}\nVerify it any time: ${certificateVerifyUrl(cert.certId)}\nAdd it to LinkedIn: ${linkedInAddUrl(cert)}\n\nCertificate ID: ${cert.certId}`,
+        html: certificateIssuedHtml(cert),
         attachment: { filename: `${cert.certId}.pdf`, content: pdf },
       });
+      const key = `${cert.clientId}:${cert.title}`;
+      const group = byClient.get(key) ?? { clientId: cert.clientId, title: cert.title, certs: [] };
+      group.certs.push({ certId: cert.certId, recipientName: cert.recipientName });
+      byClient.set(key, group);
     } catch (err) {
       console.error("certificate delivery failed:", id, err);
     }
   }
+  for (const g of byClient.values()) {
+    try {
+      const client = await prisma.user.findUnique({ where: { id: g.clientId }, select: { email: true, name: true } });
+      if (client) await sendCertificatesIssuedSummaryEmail(client.email, client.name, g.title, g.certs.map(c => ({ ...c, url: certificatePageUrl(c.certId) })));
+    } catch (err) {
+      console.error("issuer summary email failed:", g.clientId, err);
+    }
+  }
+}
+
+function certificateIssuedHtml(cert: { certId: string; recipientName: string; title: string; issuerName: string; issuedAt: Date }): string {
+  const page = certificatePageUrl(cert.certId), verify = certificateVerifyUrl(cert.certId), li = linkedInAddUrl(cert);
+  return `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#16233A">
+  <div style="padding:20px 0;border-bottom:2px solid #0F2A4A"><strong style="font-size:20px;color:#0F2A4A">Certi<span style="color:#C9A227">Task</span></strong></div>
+  <h2 style="font-size:20px;margin:24px 0 8px">Congratulations, ${cert.recipientName} 🏅</h2>
+  <p>Your certificate for <strong>${cert.title}</strong>, issued by ${cert.issuerName}, is attached as a PDF and live at the link below.</p>
+  <p style="margin:24px 0"><a href="${page}" style="background:#0F2A4A;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold">View certificate</a>
+  &nbsp; <a href="${li}" style="background:#0A66C2;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold">Add to LinkedIn</a></p>
+  <p style="font-size:13px;color:#4B5563">Certificate ID <code>${cert.certId}</code> · anyone can check it at <a href="${verify}">${verify}</a> (the QR code on the PDF opens the same page).</p>
+  <p style="font-size:12px;color:#7B8794;margin-top:32px">If you didn't expect this email you can ignore it.</p>
+</div>`;
 }
