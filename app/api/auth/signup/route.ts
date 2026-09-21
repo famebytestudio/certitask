@@ -10,9 +10,9 @@ import { attachPendingInvites } from "@/lib/teams";
 
 export async function POST(req: Request) {
   try {
-    const { email, password, fullName, role } = await req.json();
-    const { email, password, fullName, role, clientType } = await req.json();
-    const clientKey = getClientRateLimitKey(req, "signup", email);
+    const payload = await req.json();
+    const { email, password, fullName, role, clientType } = payload;
+    const clientKey = getClientRateLimitKey(req, "signup", String(email ?? ""));
 
     if (await isRateLimited(clientKey, 5, 60 * 60 * 1000)) {
       return NextResponse.json({ error: "Too many signup attempts. Try again later." }, { status: 429 });
@@ -25,9 +25,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (role !== "student" && role !== "company") {
-      return NextResponse.json({ error: "A valid account role is required." }, { status: 400 });
-    if (role !== "talent" && role !== "client") {
+    if (role !== "client" && role !== "talent") {
       return NextResponse.json({ error: "Choose whether you are a client or talent." }, { status: 400 });
     }
 
@@ -42,12 +40,10 @@ export async function POST(req: Request) {
 
     const cleanEmail = email.toLowerCase().trim();
 
-    // Check if user exists in Neon DB
     const existing = await prisma.user.findUnique({
       where: { email: cleanEmail },
+      select: { id: true },
     });
-
-    const existing = await prisma.user.findUnique({ where: { email: cleanEmail }, select: { id: true } });
     if (existing) {
       return NextResponse.json(
         { error: "An account with this email address already exists. Please sign in instead." },
@@ -56,34 +52,34 @@ export async function POST(req: Request) {
     }
 
     const hashedPassword = await hashPassword(password);
-    const dbRole = role === "student" ? "STUDENT" : "COMPANY";
 
-    // Create user in Neon PostgreSQL DB
     const user = await prisma.user.create({
       data: {
         email: cleanEmail,
         name: fullName.trim(),
         password: hashedPassword,
-        password: await hashPassword(password),
         role: dbRole,
         clientType: dbClientType,
       },
     });
 
-    // Generate JWT token
-    await audit({ userId: user.id, role: user.role }, "user.signup", "user", user.id, { role: user.role, clientType: dbClientType });
-    void sendEmailVerification(user); // never blocks signup
-    if (user.role === "TALENT") void attachPendingInvites(user).catch((e) => console.error("attach invites failed", e));
+    await audit({ userId: user.id, role: user.role }, "user.signup", "user", user.id, {
+      role: user.role,
+      clientType: dbClientType,
+    });
+
+    void sendEmailVerification(user);
+    if (user.role === "TALENT") {
+      void attachPendingInvites(user).catch((e) => console.error("attach invites failed", e));
+    }
 
     const token = await createToken({
       userId: user.id,
       email: user.email,
       name: user.name,
-      role: user.role as "COMPANY" | "STUDENT",
       role: user.role,
     });
 
-    // Set HTTP-Only Cookie
     await setAuthCookie(token);
 
     return NextResponse.json({
@@ -94,7 +90,6 @@ export async function POST(req: Request) {
         email: user.email,
         role: user.role.toLowerCase(),
       },
-      user: { id: user.id, name: user.name, email: user.email, role: user.role.toLowerCase() },
     });
   } catch (error) {
     console.error("Signup error:", error);
@@ -102,6 +97,5 @@ export async function POST(req: Request) {
       { error: "Failed to create account. Please try again." },
       { status: 500 }
     );
-    return NextResponse.json({ error: "Failed to create account. Please try again." }, { status: 500 });
   }
 }

@@ -5,7 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-/* ── Icons ──────────────────────────────────────────────────────── */
 function UserIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
@@ -74,9 +73,7 @@ const STRENGTH_CLASS = ["", "weak", "fair", "good", "strong"];
 
 export default function SignupPage() {
   const router = useRouter();
-
-  const [role, setRole] = useState<"company" | "student">("company");
-  const [role, setRole] = useState<"client" | "talent">("talent");
+  const [role, setRole] = useState<"client" | "talent">("client");
   const [clientType, setClientType] = useState<"INDIVIDUAL" | "ORGANIZATION">("INDIVIDUAL");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -88,22 +85,6 @@ export default function SignupPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const strength = getPasswordStrength(password);
-
-  function resetFormState() {
-    setFullName("");
-    setEmail("");
-    setPassword("");
-    setConfirm("");
-    setShowPass(false);
-    setShowConfirm(false);
-    setLoading(false);
-    setErrors({});
-  }
-
-  function handleRoleChange(nextRole: "company" | "student") {
-    setRole(nextRole);
-    resetFormState();
-  }
 
   function validate() {
     const errs: Record<string, string> = {};
@@ -119,7 +100,10 @@ export default function SignupPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const errs = validate();
-    if (Object.keys(errs).length) { setErrors(errs); return; }
+    if (Object.keys(errs).length) {
+      setErrors(errs);
+      return;
+    }
 
     setLoading(true);
     setErrors({});
@@ -128,20 +112,28 @@ export default function SignupPage() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, fullName, role }),
-        body: JSON.stringify({ email, password, fullName, role, clientType: role === "client" ? clientType : undefined }),
+        body: JSON.stringify({
+          email,
+          password,
+          fullName,
+          role,
+          clientType: role === "client" ? clientType : undefined,
+        }),
       });
 
       const data = await res.json();
-
       if (!res.ok) {
         setErrors({ general: data.error || "Failed to create account." });
         setLoading(false);
         return;
       }
 
-      router.push(role === "company" ? "/company/dashboard" : "/student/dashboard");
-      router.push(role === "client" ? "/client/dashboard" : "/talent/dashboard");
+      const next = new URLSearchParams(window.location.search).get("next");
+      if (next && next.startsWith("/") && !next.startsWith("//")) {
+        router.push(next);
+      } else {
+        router.push(role === "client" ? "/client/dashboard" : "/talent/dashboard");
+      }
       router.refresh();
     } catch {
       setErrors({ general: "An error occurred during account creation. Please try again." });
@@ -151,7 +143,6 @@ export default function SignupPage() {
 
   return (
     <div className="auth-root">
-      {/* ── Brand Panel ─────────────────────────────────────── */}
       <aside className="auth-brand-panel">
         <div className="brand-orb brand-orb-1" />
         <div className="brand-orb brand-orb-2" />
@@ -163,16 +154,9 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <h1 className="brand-headline">
-              Join the<br />
-              <em>Future</em> of<br />
-              Certification.
-            </h1>
+            <h1 className="brand-headline">Join the<br /><em>Future</em> of<br />Certification.</h1>
             <p className="brand-sub">
-              Whether you&apos;re a company managing compliance or a student
-              building credentials, CertiTask has you covered.
-              Post real work and issue certificates, or do the work and
-              earn credentials anyone can verify.
+              Whether you&apos;re a client posting work or a talent building credentials, CertiTask keeps everything in one place.
             </p>
           </div>
 
@@ -194,7 +178,6 @@ export default function SignupPage() {
         <p className="brand-footer">© {new Date().getFullYear()} CertiTask. All rights reserved.</p>
       </aside>
 
-      {/* ── Form Panel ──────────────────────────────────────── */}
       <div className="auth-form-panel">
         <div className="auth-form-inner">
           <div className="auth-mobile-logo">
@@ -205,58 +188,42 @@ export default function SignupPage() {
           <div className="auth-card">
             <h2 className="auth-heading">Create your account</h2>
             <p className="auth-sub">Choose your role to get started</p>
-            <p className="auth-sub">What brings you to CertiTask?</p>
 
-            {/* Role cards */}
             <div className="role-cards">
               <button
                 type="button"
-                id="role-company"
-                className={`role-card${role === "company" ? " selected" : ""}`}
-                onClick={() => handleRoleChange("company")}
-                id="role-talent"
-                className={`role-card${role === "talent" ? " selected" : ""}`}
-                onClick={() => setRole("talent")}
-                aria-pressed={role === "talent"}
-              >
-                <div className="role-card-icon">
-                  <BuildingIcon size={22} />
-                  <GradCapIcon size={22} />
-                </div>
-                <span className="role-card-label">Company</span>
-                <span className="role-card-desc">Issue & manage certifications for your team</span>
-                <span className="role-card-label">Talent</span>
-                <span className="role-card-desc">Do real projects and earn verifiable certificates</span>
-              </button>
-
-              <button
-                type="button"
-                id="role-student"
-                className={`role-card${role === "student" ? " selected" : ""}`}
-                onClick={() => handleRoleChange("student")}
-                id="role-client"
                 className={`role-card${role === "client" ? " selected" : ""}`}
                 onClick={() => setRole("client")}
                 aria-pressed={role === "client"}
               >
                 <div className="role-card-icon">
-                  <GradCapIcon size={22} />
                   <BuildingIcon size={22} />
                 </div>
-                <span className="role-card-label">Student</span>
-                <span className="role-card-desc">Earn & showcase your certifications</span>
                 <span className="role-card-label">Client</span>
                 <span className="role-card-desc">Post projects and issue certificates for completed work</span>
+              </button>
+
+              <button
+                type="button"
+                className={`role-card${role === "talent" ? " selected" : ""}`}
+                onClick={() => setRole("talent")}
+                aria-pressed={role === "talent"}
+              >
+                <div className="role-card-icon">
+                  <GradCapIcon size={22} />
+                </div>
+                <span className="role-card-label">Talent</span>
+                <span className="role-card-desc">Do real projects and earn verifiable certificates</span>
               </button>
             </div>
 
             {role === "client" && (
               <div className="role-cards" style={{ marginTop: 10 }} role="radiogroup" aria-label="Client type">
-                <button type="button" id="client-individual" className={`role-card${clientType === "INDIVIDUAL" ? " selected" : ""}`} onClick={() => setClientType("INDIVIDUAL")} role="radio" aria-checked={clientType === "INDIVIDUAL"}>
+                <button type="button" className={`role-card${clientType === "INDIVIDUAL" ? " selected" : ""}`} onClick={() => setClientType("INDIVIDUAL")} role="radio" aria-checked={clientType === "INDIVIDUAL"}>
                   <span className="role-card-label">Individual</span>
                   <span className="role-card-desc">I&apos;m posting as myself. Verified with a government ID.</span>
                 </button>
-                <button type="button" id="client-organization" className={`role-card${clientType === "ORGANIZATION" ? " selected" : ""}`} onClick={() => setClientType("ORGANIZATION")} role="radio" aria-checked={clientType === "ORGANIZATION"}>
+                <button type="button" className={`role-card${clientType === "ORGANIZATION" ? " selected" : ""}`} onClick={() => setClientType("ORGANIZATION")} role="radio" aria-checked={clientType === "ORGANIZATION"}>
                   <span className="role-card-label">Organization</span>
                   <span className="role-card-desc">A company, startup, NGO or institute. Verified with registration documents.</span>
                 </button>
@@ -264,14 +231,9 @@ export default function SignupPage() {
             )}
 
             <form onSubmit={handleSubmit} noValidate>
-              {/* General error */}
-              {errors.general && (
-                <div className="field-error mb-4">{errors.general}</div>
-              )}
+              {errors.general && <div className="field-error mb-4">{errors.general}</div>}
 
-              {/* Full Name */}
               <div className="form-group">
-                <label className="form-label" htmlFor="signup-name">Full name</label>
                 <label className="form-label" htmlFor="signup-name">{role === "client" && clientType === "ORGANIZATION" ? "Organization name" : "Full name"}</label>
                 <div className="input-wrap">
                   <span className="input-icon"><UserIcon /></span>
@@ -288,7 +250,6 @@ export default function SignupPage() {
                 {errors.fullName && <span className="field-error">{errors.fullName}</span>}
               </div>
 
-              {/* Email */}
               <div className="form-group">
                 <label className="form-label" htmlFor="signup-email">Email address</label>
                 <div className="input-wrap">
@@ -306,7 +267,6 @@ export default function SignupPage() {
                 {errors.email && <span className="field-error">{errors.email}</span>}
               </div>
 
-              {/* Password */}
               <div className="form-group">
                 <label className="form-label" htmlFor="signup-password">Password</label>
                 <div className="input-wrap">
@@ -328,21 +288,15 @@ export default function SignupPage() {
                   <>
                     <div className="password-strength">
                       {[1, 2, 3, 4].map((i) => (
-                        <div
-                          key={i}
-                          className={`strength-bar${i <= strength.level ? ` ${STRENGTH_CLASS[strength.level]}` : ""}`}
-                        />
+                        <div key={i} className={`strength-bar${i <= strength.level ? ` ${STRENGTH_CLASS[strength.level]}` : ""}`} />
                       ))}
                     </div>
-                    {strength.label && (
-                      <span className="strength-label">{strength.label} password</span>
-                    )}
+                    {strength.label && <span className="strength-label">{strength.label} password</span>}
                   </>
                 )}
                 {errors.password && <span className="field-error">{errors.password}</span>}
               </div>
 
-              {/* Confirm Password */}
               <div className="form-group">
                 <label className="form-label" htmlFor="signup-confirm">Confirm password</label>
                 <div className="input-wrap">
@@ -363,33 +317,13 @@ export default function SignupPage() {
                 {errors.confirm && <span className="field-error">{errors.confirm}</span>}
               </div>
 
-              <button
-                type="submit"
-                id="signup-submit"
-                className={`btn-primary mt-4${loading ? " loading" : ""}`}
-                disabled={loading}
-              >
-                {loading ? (
-                  <><span className="spinner" />Creating account…</>
-                ) : (
-                  `Create ${role === "company" ? "Company" : "Student"} Account`
-                  `Create ${role === "client" ? "client" : "talent"} account`
-                )}
+              <button type="submit" className={`btn-primary mt-4${loading ? " loading" : ""}`} disabled={loading}>
+                {loading ? <><span className="spinner" />Creating account…</> : `Create ${role === "client" ? "Client" : "Talent"} account`}
               </button>
-
-              <p style={{ fontSize: 12, color: "var(--ink-subtle)", textAlign: "center", marginTop: 12, lineHeight: 1.6 }}>
-                By creating an account you agree to our{" "}
-                <a href="#" className="auth-link" style={{ fontSize: 12 }}>Terms of Service</a>
-                {" "}and{" "}
-                <a href="#" className="auth-link" style={{ fontSize: 12 }}>Privacy Policy</a>.
-              </p>
             </form>
           </div>
 
-          <p className="auth-nav-text">
-            Already have an account?{" "}
-            <Link href="/auth/login" className="auth-link">Sign in</Link>
-          </p>
+          <p className="auth-nav-text">Already have an account? <Link href="/auth/login" className="auth-link">Sign in</Link></p>
         </div>
       </div>
     </div>

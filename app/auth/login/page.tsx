@@ -5,7 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-/* ── SVG Icons ─────────────────────────────────────────────────── */
 function MailIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
@@ -53,9 +52,7 @@ function GradCapIcon() {
 
 export default function LoginPage() {
   const router = useRouter();
-
-  const [role, setRole] = useState<"company" | "student">("company");
-  const [role, setRole] = useState<"client" | "talent">("talent");
+  const [role, setRole] = useState<"client" | "talent">("client");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -75,20 +72,22 @@ export default function LoginPage() {
       });
 
       const data = await res.json();
-
       if (!res.ok) {
         setError(data.error || "Invalid email or password.");
         setLoading(false);
         return;
       }
 
-      // Redirect based on user role from Neon DB or selected tab
       const destRole = data.user?.role || role;
-      router.push(destRole === "student" ? "/student/dashboard" : "/company/dashboard");
       const next = new URLSearchParams(window.location.search).get("next");
-      if (destRole === "admin") router.push("/admin/dashboard");
-      else if (next && next.startsWith("/") && !next.startsWith("//")) router.push(next);
-      else router.push(destRole === "talent" ? "/talent/dashboard" : "/client/dashboard");
+
+      if (destRole === "admin") {
+        router.push("/admin/dashboard");
+      } else if (next && next.startsWith("/") && !next.startsWith("//")) {
+        router.push(next);
+      } else {
+        router.push(destRole === "talent" ? "/talent/dashboard" : "/client/dashboard");
+      }
       router.refresh();
     } catch {
       setError("An error occurred during sign in. Please try again.");
@@ -98,35 +97,19 @@ export default function LoginPage() {
 
   return (
     <div className="auth-root">
-      {/* ── Brand Panel ─────────────────────────────────────── */}
       <aside className="auth-brand-panel">
         <div className="brand-orb brand-orb-1" />
         <div className="brand-orb brand-orb-2" />
-
         <div className="brand-content">
           <div className="brand-logo-wrap">
-            <Image
-              src="/app-icon-128.png"
-              alt="CertiTask"
-              width={44}
-              height={44}
-              className="brand-logo-img"
-            />
-            <span className="brand-wordmark">
-              Certi<span>Task</span>
-            </span>
+            <Image src="/app-icon-128.png" alt="CertiTask" width={44} height={44} className="brand-logo-img" />
+            <span className="brand-wordmark">Certi<span>Task</span></span>
           </div>
 
           <div>
-            <h1 className="brand-headline">
-              Certifications,<br />
-              <em>Simplified.</em>
-            </h1>
+            <h1 className="brand-headline">Certifications,<br /><em>Simplified.</em></h1>
             <p className="brand-sub">
-              The platform that connects companies and students through
-              seamless certification management and task tracking.
-              Real projects from clients, real proof for talent. Sign in to
-              post work, do work, or manage your certificates.
+              The platform that connects companies and students through seamless certification management and task tracking.
             </p>
           </div>
 
@@ -145,72 +128,48 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className="brand-footer">
-          © {new Date().getFullYear()} CertiTask. All rights reserved.
-        </p>
+        <p className="brand-footer">© {new Date().getFullYear()} CertiTask. All rights reserved.</p>
       </aside>
 
-      {/* ── Form Panel ──────────────────────────────────────── */}
       <div className="auth-form-panel">
         <div className="auth-form-inner">
-          {/* Mobile logo */}
           <div className="auth-mobile-logo">
             <Image src="/app-icon-128.png" alt="CertiTask" width={36} height={36} />
-            <span>
-              Certi<em>Task</em>
-            </span>
+            <span>Certi<em>Task</em></span>
           </div>
 
           <div className="auth-card">
             <h2 className="auth-heading">Welcome back</h2>
             <p className="auth-sub">Sign in to your account to continue</p>
 
-            {/* Role tabs */}
             <div className="role-tabs" role="tablist">
               <button
                 type="button"
                 role="tab"
-                className={`role-tab${role === "company" ? " active" : ""}`}
-                onClick={() => setRole("company")}
-                aria-selected={role === "company"}
-                id="tab-company-login"
                 className={`role-tab${role === "client" ? " active" : ""}`}
                 onClick={() => setRole("client")}
                 aria-selected={role === "client"}
-                id="tab-client-login"
               >
                 <BuildingIcon />
-                Company
                 Client
               </button>
               <button
                 type="button"
                 role="tab"
-                className={`role-tab${role === "student" ? " active" : ""}`}
-                onClick={() => setRole("student")}
-                aria-selected={role === "student"}
-                id="tab-student-login"
                 className={`role-tab${role === "talent" ? " active" : ""}`}
                 onClick={() => setRole("talent")}
                 aria-selected={role === "talent"}
-                id="tab-talent-login"
               >
                 <GradCapIcon />
-                Student
                 Talent
               </button>
             </div>
 
             <form onSubmit={handleSubmit} noValidate>
-              {/* Email */}
               <div className="form-group">
-                <label className="form-label" htmlFor="login-email">
-                  Email address
-                </label>
+                <label className="form-label" htmlFor="login-email">Email address</label>
                 <div className="input-wrap">
-                  <span className="input-icon">
-                    <MailIcon />
-                  </span>
+                  <span className="input-icon"><MailIcon /></span>
                   <input
                     id="login-email"
                     type="email"
@@ -224,20 +183,13 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Password */}
               <div className="form-group">
                 <div className="flex items-center justify-between">
-                  <label className="form-label" htmlFor="login-password">
-                    Password
-                  </label>
-                  <Link href="/auth/forgot-password" className="forgot-link">
-                    Forgot password?
-                  </Link>
+                  <label className="form-label" htmlFor="login-password">Password</label>
+                  <Link href="/auth/forgot-password" className="forgot-link">Forgot password?</Link>
                 </div>
                 <div className="input-wrap">
-                  <span className="input-icon">
-                    <LockIcon />
-                  </span>
+                  <span className="input-icon"><LockIcon /></span>
                   <input
                     id="login-password"
                     type={showPass ? "text" : "password"}
@@ -248,18 +200,12 @@ export default function LoginPage() {
                     required
                     autoComplete="current-password"
                   />
-                  <button
-                    type="button"
-                    className="input-btn"
-                    onClick={() => setShowPass((v) => !v)}
-                    aria-label={showPass ? "Hide password" : "Show password"}
-                  >
+                  <button type="button" className="input-btn" onClick={() => setShowPass((v) => !v)} aria-label={showPass ? "Hide password" : "Show password"}>
                     <EyeIcon visible={showPass} />
                   </button>
                 </div>
               </div>
 
-              {/* Error */}
               {error && (
                 <div className="field-error mb-4">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: 14, height: 14, flexShrink: 0 }}>
@@ -269,36 +215,21 @@ export default function LoginPage() {
                 </div>
               )}
 
-              <button
-                type="submit"
-                id="login-submit"
-                className={`btn-primary mt-4${loading ? " loading" : ""}`}
-                disabled={loading || !email || !password}
-              >
+              <button type="submit" id="login-submit" className={`btn-primary mt-4${loading ? " loading" : ""}`} disabled={loading || !email || !password}>
                 {loading ? (
                   <>
                     <span className="spinner" />
                     Signing in…
                   </>
                 ) : (
-                  `Sign in as ${role === "company" ? "Company" : "Student"}`
-                  `Sign in as ${role === "client" ? "client" : "talent"}`
+                  `Sign in as ${role === "client" ? "Client" : "Talent"}`
                 )}
               </button>
             </form>
           </div>
 
           <p className="auth-nav-text">
-            Don&apos;t have an account?{" "}
-            <Link href="/auth/signup" className="auth-link">
-              Create account
-            </Link>
-          </p>
-          <p className="auth-nav-text mt-2">
-            Administrator?{" "}
-            <Link href="/admin/login" className="auth-link">
-              Use the admin portal
-            </Link>
+            Don&apos;t have an account? <Link href="/auth/signup" className="auth-link">Create account</Link>
           </p>
         </div>
       </div>
