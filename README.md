@@ -1,158 +1,216 @@
-# CertiTask — Certification & Task Management Platform
+# CertiTask
 
-CertiTask is a web application designed to connect **Companies** and **Students** through certification issuance, trainee roster management, and task tracking. 
+CertiTask turns real project work into verifiable professional proof. Clients
+post projects, talent applies or forms a team, the client reviews submissions,
+and approved work becomes a publicly verifiable certificate.
 
-Built with **Next.js 16**, **React 19**, **Prisma ORM v7**, **Neon PostgreSQL**, and custom **JWT HTTP-Only Cookie Authentication**.
+Built with Next.js 16, React 19, TypeScript, Prisma ORM 7, Neon PostgreSQL,
+and custom JWT sessions.
 
----
+## Product Features
 
-## 🚀 Features
+### Client workspace
 
-- 🏢 **Company Portal (`/company/dashboard`)**:
-  - Issue accredited certifications to trainees.
-  - Assign trackable tasks with due dates and priority levels.
-  - Monitor enterprise compliance metrics and student progress in real-time.
-- 🎓 **Student Portal (`/student/dashboard`)**:
-  - View verified credential badges and certificates.
-  - Track assigned tasks with progress indicators and toggle completion status.
-  - Follow visual skill accreditation roadmaps.
-- 🔒 **Secure Custom Authentication**:
-  - Direct integration with **Neon PostgreSQL** via **Prisma ORM**.
-  - Password hashing with `bcryptjs`.
-  - Secure session cookies using `jose` (JWT) and Next.js Edge Middleware route protection.
+- Create and edit a client profile, including organization details and contact links.
+- Post, edit, pause, and close projects with categories, deadlines, skills, budgets, and team-size requirements.
+- Review applications, shortlist or select talent, and manage project teams.
+- Review submissions and issue certificates for accepted work.
+- Track projects, applications, submissions, certificates, verification, and billing from one dashboard at `/client/dashboard`.
 
----
+### Talent workspace
 
-## 🛠️ Tech Stack
+- Browse active projects and apply individually or with a team.
+- Create and manage teams, invite members, and submit completed work.
+- Track applications, selected projects, submission status, and certificates at `/talent/dashboard`.
+- Maintain a public talent profile with skills, education, portfolio, resume, and verification status.
 
-- **Framework**: Next.js 16 (App Router)
-- **Language**: TypeScript
-- **UI & Styling**: React 19, Vanilla CSS Design System, Tailwind CSS
-- **Database & ORM**: Neon PostgreSQL, Prisma ORM 7
-- **Auth & Security**: `bcryptjs` (password hashing), `jose` (JWT tokens in HTTP-only cookies)
+### Trust, verification, and certificates
 
----
+- Email verification and password reset flows.
+- Client and talent identity/profile verification with document uploads.
+- Unique certificate IDs with public verification pages at `/verify` and `/verify/[certId]`.
+- Certificate PDFs and certificate hold/review handling.
+- Audit logs and in-app notifications for important workflow events.
 
-## 📋 Prerequisites
+### Administration and billing
 
-Ensure you have the following installed on your system:
-- **Node.js** (v18.0.0 or higher)
-- **npm** (v9.0.0 or higher) or **pnpm** / **yarn**
+- Admin login and dashboards for users, projects, payments, contact messages, and verification queues.
+- Safepay-hosted checkout with webhook confirmation and payment receipts.
+- Talent accounts are free. Verified clients receive `FREE_POSTS` free project posts, then choose a prepaid plan:
+  - **Starter**: 5 posts per 30 days, applications and team rosters.
+  - **Growth**: 15 posts per 30 days, applicant filters, priority visibility, and analytics.
+  - **Pro**: unlimited posts, featured placement, priority support, and all Growth features.
+- Default plan prices are `$5`, `$10`, and `$20`; prices can be overridden with environment variables.
+- Plans do not auto-charge. Clients renew or upgrade when needed.
 
----
+## Tech Stack
 
-## ⚙️ Environment Setup
+- **Framework:** Next.js 16 App Router and React 19
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS 4 and the project CSS design system
+- **Database:** Neon PostgreSQL
+- **ORM:** Prisma 7 with `@prisma/adapter-pg` and `pg`
+- **Authentication:** `bcryptjs` password hashing, `jose` JWTs, hashed server-side sessions, HTTP-only cookies
+- **Payments:** Safepay hosted checkout and webhooks
+- **Email:** Nodemailer-compatible SMTP provider
+- **Rate limiting:** Upstash Redis when configured, otherwise an in-memory development fallback
 
-Create a `.env` (or `.env.local`) file in the root directory of the project:
+## Requirements
+
+- Node.js 18 or newer
+- npm 9 or newer
+- A PostgreSQL database, recommended: Neon
+
+## Environment Configuration
+
+Copy `.env.example` to `.env.local` and fill in the values. Never commit `.env`
+or `.env.local`.
+
+### Required
 
 ```env
-# Neon PostgreSQL Database Connection String
-DATABASE_URL="postgresql://user:password@host:port/database?sslmode=require"
-
-# JWT Secret Key for Session Encryption
-JWT_SECRET="replace-with-a-long-random-secret"
-
-# Public URL and password-reset email delivery
-APP_URL="https://your-production-domain.example"
-SMTP_HOST="smtp.example.com"
-SMTP_PORT="587"
-SMTP_USER="smtp-user"
-SMTP_PASS="smtp-password"
-EMAIL_FROM="no-reply@your-production-domain.example"
-
-# Admin authentication uses a bcrypt hash generated locally.
-SUPER_ADMIN_PASSWORD_HASH="replace-with-bcrypt-password-hash"
-
-# Required for distributed production rate limiting
-UPSTASH_REDIS_REST_URL="https://your-instance.upstash.io"
-UPSTASH_REDIS_REST_TOKEN="your-upstash-rest-token"
+DATABASE_URL="postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require"
+JWT_SECRET="a-long-random-secret"
 ```
 
----
+The password in `DATABASE_URL` must be URL-encoded if it contains reserved URL
+characters. `DATABASE_URL` must use current credentials from the Neon project.
 
-## 📥 Installation & Running Locally
+### Admin
 
-### 1. Clone the Repository
+```env
+SUPER_ADMIN_EMAIL="admin@example.com"
+SUPER_ADMIN_PASSWORD_HASH=""
+```
+
+Generate a password hash with:
+
+```bash
+node -e "console.log(require('bcryptjs').hashSync('your-password', 10))"
+```
+
+### Email and application URL
+
+```env
+APP_URL="http://localhost:3000"
+SMTP_HOST=""
+SMTP_PORT="587"
+SMTP_USER=""
+SMTP_PASS=""
+EMAIL_FROM="no-reply@example.com"
+```
+
+Email features are skipped when SMTP is not configured. `APP_URL` is used for
+links in verification and password-reset emails.
+
+### Optional services
+
+```env
+CERTIFICATE_SIGNING_KEY=""
+UPSTASH_REDIS_REST_URL=""
+UPSTASH_REDIS_REST_TOKEN=""
+CRON_SECRET=""
+ID_HASH_PEPPER=""
+```
+
+`CERTIFICATE_SIGNING_KEY` and `ID_HASH_PEPPER` fall back to `JWT_SECRET` when
+empty. Upstash is recommended for distributed rate limiting in production.
+
+### Safepay billing
+
+```env
+SAFEPAY_ENV="sandbox"
+SAFEPAY_BASE_URL="https://sandbox.api.getsafepay.com"
+SAFEPAY_PUBLIC_KEY=""
+SAFEPAY_SECRET_KEY=""
+SAFEPAY_WEBHOOK_SECRET=""
+PLAN_PRICE_STARTER_CENTS=""
+PLAN_PRICE_GROWTH_CENTS=""
+PLAN_PRICE_PRO_CENTS=""
+FREE_POSTS=""
+```
+
+Use matching Safepay sandbox or production values. `FREE_POSTS` defaults to 2,
+and plan prices default to 500, 1000, and 2000 USD cents.
+
+## Setup and Local Development
+
 ```bash
 git clone https://github.com/FaizaNaseem80/Certi-task.git
 cd certitask
-```
-
-### 2. Install Dependencies
-```bash
 npm install
 ```
 
-### 3. Sync Database Schema with Neon PostgreSQL
-Run Prisma database push to create the required database tables (`User`, `Certificate`, `Task`) in your Neon PostgreSQL database:
-```bash
-npx prisma db push
-```
-
-For production, apply the committed migrations instead:
+After configuring the database:
 
 ```bash
+npx prisma generate
 npx prisma migrate deploy
-```
-
-### 4. Start the Development Server
-```bash
 npm run dev
 ```
 
-### 5. Open in Browser
-Navigate to [http://localhost:3000](http://localhost:3000) in your web browser.
-
----
-
-## 🔑 Usage Guide
-
-### Creating Accounts & Logging In
-1. Visit [http://localhost:3000/auth/signup](http://localhost:3000/auth/signup).
-2. Choose your role:
-   - **Company**: Select the **Company** tab to create an organization admin account.
-   - **Student**: Select the **Student** tab to create a student/learner account.
-3. Upon signup or login, you will be automatically redirected to your role's dashboard:
-   - **Company Admin** → `/company/dashboard`
-   - **Student Learner** → `/student/dashboard`
-
----
-
-## 🏗️ Production Build
-
-To test or generate the production bundle:
+Open [http://localhost:3000](http://localhost:3000). For local schema
+experimentation, use `npx prisma db push`; use committed migrations for shared
+or production databases. The seed script is available with:
 
 ```bash
-# Build the application
-npm run build
-
-# Start the production server
-npm run start
+npm run seed
 ```
 
----
+Useful scripts:
 
-## 📁 Project Structure
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the Next.js development server |
+| `npm run build` | Generate Prisma client and build the production app |
+| `npm run start` | Start the production build |
+| `npm run lint` | Run ESLint |
+| `npm run seed` | Run `scripts/seed.js` |
 
-```
-certitask/
-├── app/
-│   ├── api/
-│   │   └── auth/           # Signup, Login, Logout, Me API endpoints
-│   ├── auth/               # Login, Signup, Forgot/Reset Password pages
-│   ├── company/
-│   │   └── dashboard/      # Company Enterprise Portal
-│   ├── student/
-│   │   └── dashboard/      # Student Learner Portal
-│   ├── globals.css         # Global Brand Design Tokens & Styles
-│   ├── layout.tsx          # Root Layout
-│   └── page.tsx            # Home Page (Redirects to /auth/login)
-├── lib/
-│   ├── auth.ts             # Password hashing, JWT token & cookie utilities
-│   └── prisma.ts           # Prisma Client singleton
-├── prisma/
-│   ├── schema.prisma       # Database schema models (User, Certificate, Task)
-│   └── prisma.config.ts    # Prisma v7 configuration
-├── proxy.ts                # Next.js 16 Edge Middleware for route protection
-└── README.md
-```
+## Main Routes
+
+| Route | Purpose |
+| --- | --- |
+| `/` | Public product homepage |
+| `/projects` and `/projects/[id]` | Browse project listings and details |
+| `/clients` and `/clients/[id]` | Browse public client profiles |
+| `/talents/[id]` | View public talent profiles |
+| `/pricing` | Client plans and Safepay billing information |
+| `/auth/signup` | Create a client or talent account |
+| `/auth/login` | Sign in |
+| `/auth/verify-email` | Verify an email address |
+| `/auth/forgot-password` and `/auth/reset-password` | Password recovery |
+| `/client/dashboard` | Client project, review, certificate, verification, and billing workspace |
+| `/talent/dashboard` | Talent project, team, application, submission, and certificate workspace |
+| `/admin/login` and `/admin/dashboard` | Administrative operations |
+| `/certificates/[id]` | View a certificate |
+| `/verify` | Verify a certificate by ID |
+| `/about`, `/how-it-works`, `/contact` | Public information and contact pages |
+| `/payment/success` and `/payment/cancel` | Safepay checkout results |
+
+The API follows the same domain areas under `/api`: authentication, projects,
+applications, submissions, teams, certificates, verification, notifications,
+clients, talents, billing, Safepay webhooks, admin operations, and scheduled
+jobs.
+
+## Data Model
+
+The Prisma schema includes users and role-specific profiles, projects, teams,
+applications, submissions, certificates, certificate holds, verification
+requests and documents, payments, subscriptions, audit logs, notifications,
+contact messages, sessions, and password/email verification tokens.
+
+Database configuration is in `prisma/schema.prisma` and `prisma.config.ts`.
+The Prisma client singleton and PostgreSQL adapter are in `lib/prisma.ts`.
+
+## Production Notes
+
+- Run `npx prisma migrate deploy` before starting a deployment.
+- Use production Safepay credentials and a webhook endpoint at
+  `/api/safepay/webhook`.
+- Set `APP_URL` to the public HTTPS origin.
+- Configure SMTP for email verification, password reset, and certificate delivery.
+- Configure Upstash Redis when running more than one application instance.
+- Protect cron endpoints with `CRON_SECRET`.
+- Keep database credentials, JWT secrets, payment keys, SMTP credentials, and
+  admin password hashes out of source control.
